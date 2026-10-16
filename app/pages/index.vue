@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ArrowRight, BellRing, Route, Sunrise } from '@lucide/vue'
+import { MAX_ACTIVE_BOOKINGS } from '#shared/domain/evaluation'
 
 useHead({ title: 'Accueil' })
 
@@ -54,7 +55,7 @@ const steps = [
           tone="surface"
           class="tnum"
         >
-          0/6 réservés
+          {{ home?.activeBookings ?? 0 }}/{{ MAX_ACTIVE_BOOKINGS }} réservés
         </AppChip>
         <AppChip
           v-if="lastSnapshot"
