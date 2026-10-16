@@ -44,6 +44,7 @@ Sign in as the seeded traveller `voyageur@veille-max.test`: the code arrives in 
 | `npm run db:reset` | Recreates the local database from the migrations and `supabase/seed.sql`. |
 | `npm run db:types` | Regenerates [`shared/types/database.types.ts`](shared/types/database.types.ts) from the local database. |
 | `npm run stations:refresh` | Writes a migration that refreshes the station reference (see Database). |
+| `npm run pwa:icons` | Regenerates the app icons in `public/` from the favicon ([`pwa-assets.config.ts`](pwa-assets.config.ts)). |
 
 ## Tests
 
@@ -57,6 +58,7 @@ The testing approach is described in the spec's "Testing Decisions":
 npm test                         # unit and integration tests; needs the local stack and .env (see Getting started)
 npx playwright install chromium  # once
 npm run test:e2e                 # needs the local stack and .env
+E2E_PORT=3101 npm run test:e2e   # on another port, e.g. while another worktree's tests hold 3100
 ```
 
 ## Database
@@ -65,6 +67,7 @@ npm run test:e2e                 # needs the local stack and .env
 - Functions are private by default: a migration grants `execute` explicitly to the roles that may call a function (see the initial migration).
 - Every traveller-owned row carries a `user_id` protected by row-level security; availability data is global ([ADR 0002](docs/adr/0002-multi-user-schema-shared-availability.md)).
 - **Trip template:** `template_legs` (one row per traveller and leg) and `template_routes` (its ranked routes). A traveller who never saved a leg gets the default from [`shared/domain/trip-template.ts`](shared/domain/trip-template.ts): Friday outbound, Sunday return, no routes. The app saves a leg with its routes in one call to `save_template_leg`, which runs under the caller's RLS.
+- **Push devices:** `push_subscriptions` holds each device on which a traveller turned notifications on: its Web Push endpoint and keys, and a label (« iPhone »). A traveller can have several. The app registers a device through `register_push_device`, which gives the subscription to the signed-in traveller even when another traveller had it on that browser before.
 - **Availability history** (global, read by every signed-in traveller, written by the server role only): `snapshots` (one row per ingested SNCF snapshot, keyed by its processed timestamp), `train_observations` (every train seen on a tracked route, with its first and last snapshot) and `openings` (runs of consecutive snapshots in which a train had an open seat). `record_snapshot` writes one snapshot in a single transaction; `tracked_routes` lists the routes to collect.
 
 ### Station reference
@@ -100,6 +103,14 @@ curl -X POST -H "x-tick-secret: $NUXT_TICK_SECRET" http://localhost:3000/api/cro
 
 `GET /api/health` returns `{ "status": "ok", "database": "ok" }` when the server reaches Postgres through Supabase, and a 503 otherwise.
 
+## Installable app and notifications
+
+- The app is a PWA ([`@vite-pwa/nuxt`](https://vite-pwa-org.netlify.app/frameworks/nuxt)): `/manifest.webmanifest` (standalone display, scope `/`, icons) and a service worker of our own, [`service-worker/sw.ts`](service-worker/sw.ts). It shows a notification for every push and, when one is tapped, opens the URL the push carries if it lies inside the scope, the home screen otherwise. It never answers page loads ([ADR 0004](docs/adr/0004-service-worker-without-fetch-handling.md)).
+- iOS only sends notifications to an app added to the home screen. In Safari, Réglages says so instead of offering the switch.
+- Réglages → Notifications: « Notifications sur cet iPhone » turns notifications on for the device in use. The permission prompt and the subscription happen within the tap, as iOS requires. The card lists the traveller's devices, marks « Cet appareil », and « Envoyer une notification de test » sends a notification to every device (`POST /api/push/test`).
+- The server sends pushes behind a `PushGateway` port ([`server/push`](server/push)): Web Push with the VAPID keys in production, a recording fake in the integration tests. A subscription the push service reports gone (404 or 410) is deleted.
+- Real delivery and home-screen installation cannot be automated: run the [manual iPhone checklist](docs/manual-iphone-checklist.md) after changing them.
+
 ## Sign-in
 
 - Travellers sign in with a 6-digit code sent by email (Supabase email OTP) and typed in the app. There are no magic links: from Mail, a link would open in Safari, whose storage is separate from the installed app. The email template is [`supabase/templates/sign-in-code.html`](supabase/templates/sign-in-code.html).
@@ -116,11 +127,14 @@ curl -X POST -H "x-tick-secret: $NUXT_TICK_SECRET" http://localhost:3000/api/cro
 | `NUXT_PUBLIC_SUPABASE_KEY` | App (`.env`, Vercel) | Supabase publishable key (`sb_publishable_…`), exposed to the browser. |
 | `NUXT_SUPABASE_SECRET_KEY` | App (`.env`, Vercel) | Supabase secret key (`sb_secret_…`), server only. |
 | `NUXT_TICK_SECRET` | App (`.env`, Vercel) | Shared secret of the tick endpoint, server only. Same value as the `tick_secret` Vault secret. |
+| `NUXT_PUBLIC_VAPID_PUBLIC_KEY` | App (`.env`, Vercel) | Web Push VAPID public key, exposed to the browser. |
+| `NUXT_VAPID_PRIVATE_KEY` | App (`.env`, Vercel) | Web Push VAPID private key, server only. |
+| `NUXT_VAPID_SUBJECT` | App (`.env`, Vercel) | Contact for the push services, e.g. `mailto:you@example.com`. |
 | `SUPABASE_ACCESS_TOKEN` | GitHub Actions secret | Personal access token used by the Supabase CLI to apply migrations. |
 | `SUPABASE_DB_PASSWORD` | GitHub Actions secret | Password of the hosted Postgres database. |
 | `SUPABASE_PROJECT_ID` | GitHub Actions variable | Reference of the hosted Supabase project. The migrations job is skipped while it is unset. |
 
-[`.env.example`](.env.example) lists the app variables. Later tickets will add the push notification keys.
+[`.env.example`](.env.example) lists the app variables.
 
 ## CI/CD
 
@@ -147,12 +161,14 @@ One-time setup:
    ```
 
    Check `select * from cron.job` (the `tick` job is active) and, after the next quarter hour, `select status_code, content from net._http_response order by id desc limit 1` (a 200 with the tick summary).
+6. **Notifications:** generate a VAPID key pair once (`npx web-push generate-vapid-keys`) and add it to Vercel (Production) as `NUXT_PUBLIC_VAPID_PUBLIC_KEY` and `NUXT_VAPID_PRIVATE_KEY`, with `NUXT_VAPID_SUBJECT`. Redeploy, then run the [manual iPhone checklist](docs/manual-iphone-checklist.md). Changing the key pair later stops every subscription: each device must turn notifications on again.
 
 ## Project layout
 
 ```text
 app/                 Nuxt app: pages, layouts, components, styles
-server/              Nitro server: routes, snapshot ingestion, the tick
+server/              Nitro server: routes, snapshot ingestion, the tick, push delivery
+service-worker/      The app's service worker: notifications
 shared/domain/       Domain rules, pure TypeScript (the trip template; the domain core will join it)
 shared/utils/        Code shared by the app and the server (Paris time, trip template and snapshot storage)
 scripts/             Developer scripts (local .env, station reference refresh)

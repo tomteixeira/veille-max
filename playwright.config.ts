@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs'
 import { defineConfig, devices } from '@playwright/test'
 import { INVITED_TRAVELLER_STATE } from './test/e2e/support/travellers'
 
-const PORT = 3100
+// `E2E_PORT` lets two checkouts (git worktrees) run their tests side by side.
+const PORT = Number(process.env.E2E_PORT ?? 3100)
 const baseURL = `http://localhost:${PORT}`
 const isCI = !!process.env.CI
 
@@ -42,6 +43,10 @@ export default defineConfig({
     timeout: 240_000,
     stdout: 'pipe',
     // The tick endpoint refuses every call while no secret is set: give it one to check.
-    env: { NUXT_TICK_SECRET: 'e2e-tick-secret' },
+    // The notification settings need a VAPID public key to subscribe with; pushes are never sent.
+    env: {
+      NUXT_TICK_SECRET: 'e2e-tick-secret',
+      NUXT_PUBLIC_VAPID_PUBLIC_KEY: 'BHnAoDkLMDLXCUEj6QmqmLkIBX4j3XA1_Dc1kLjronDF3UKllTVkHP8gPiBZY4nSBWl0tyN3hjp-GrOtGhTJAEI',
+    },
   },
 })

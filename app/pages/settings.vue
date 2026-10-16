@@ -12,10 +12,6 @@ const [{ template, stations, status, refresh, stationName, saveLeg }, { routeWei
 const editing = ref<LegKind | null>(null)
 const editorTitleId = useId()
 
-const upcomingCards = [
-  { title: 'Notifications', text: 'Nouveaux trains chaque matin et rappel de confirmation la veille, sur chacun de vos appareils.' },
-] as const
-
 const supabase = useSupabaseClient()
 const traveller = useSupabaseUser()
 const interactive = useInteractive()
@@ -113,20 +109,7 @@ async function signOut() {
         :disabled="!interactive"
       />
 
-      <SurfaceCard
-        v-for="card in upcomingCards"
-        :key="card.title"
-      >
-        <div class="flex items-center justify-between gap-4">
-          <h2 class="text-[15px] font-extrabold">
-            {{ card.title }}
-          </h2>
-          <AppChip>Bientôt</AppChip>
-        </div>
-        <p class="mt-2 text-[13px] leading-snug font-medium text-ink-muted">
-          {{ card.text }}
-        </p>
-      </SurfaceCard>
+      <NotificationsCard />
 
       <SurfaceCard
         as="section"

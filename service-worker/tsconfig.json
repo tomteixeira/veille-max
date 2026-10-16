@@ -1,0 +1,16 @@
+{
+  // Type-checks the service worker against the worker APIs, which the app's DOM types do not describe.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext", "WebWorker"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true
+  },
+  "include": ["./**/*.ts"]
+}

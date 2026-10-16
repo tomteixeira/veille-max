@@ -55,6 +55,20 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"push_subscriptions": {
+                  Row: {
+                    "auth": string,"created_at": string,"device_label": string,"endpoint": string,"id": string,"p256dh": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "auth": string,"created_at"?: string,"device_label": string,"endpoint": string,"id"?: string,"p256dh": string,"user_id"?: string
+                  }
+                  Update: {
+                    "auth"?: string,"created_at"?: string,"device_label"?: string,"endpoint"?: string,"id"?: string,"p256dh"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"snapshots": {
                   Row: {
                     "id": number,"ingested_at": string,"open_count": number,"processed_at": string,"row_count": number
@@ -192,6 +206,9 @@ isOneToOne: false
                            },
 "record_snapshot":
 { Args: { "ingested_at": string,"processed_at": string,"trains": Json }; Returns: Json
+                           },
+"register_push_device":
+{ Args: { "auth": string,"device_label": string,"endpoint": string,"p256dh": string }; Returns: undefined
                            },
 "save_template_leg":
 { Args: { "anchor": Database["public"]['Enums']["time_anchor"],"ideal_time": string,"kind": Database["public"]['Enums']["leg_kind"],"routes": Json,"weekday": number,"window_end"?: string,"window_start"?: string }; Returns: undefined

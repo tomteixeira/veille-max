@@ -2,7 +2,7 @@ import tailwindcss from '@tailwindcss/vite'
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  modules: ['@nuxt/eslint', '@nuxtjs/supabase'],
+  modules: ['@nuxt/eslint', '@nuxtjs/supabase', '@vite-pwa/nuxt'],
 
   devtools: { enabled: true },
 
@@ -18,6 +18,12 @@ export default defineNuxtConfig({
         // Matches the canvas token of each theme (see app/assets/css/main.css).
         { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#f5f5f4' },
         { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#0c0a09' },
+        { name: 'apple-mobile-web-app-title', content: 'Veille MAX' },
+      ],
+      link: [
+        { rel: 'icon', href: '/favicon.svg', type: 'image/svg+xml' },
+        { rel: 'apple-touch-icon', href: '/apple-touch-icon-180x180.png' },
+        { rel: 'manifest', href: '/manifest.webmanifest' },
       ],
     },
   },
@@ -27,6 +33,13 @@ export default defineNuxtConfig({
   runtimeConfig: {
     // Shared with the `pg_cron` job that calls the tick endpoint (`NUXT_TICK_SECRET`).
     tickSecret: '',
+    // Web Push (VAPID): the key pair that signs every push, and a contact for the push services.
+    vapidPrivateKey: '',
+    vapidSubject: '',
+    public: {
+      // Sent to the browser, which hands it to its push service when subscribing.
+      vapidPublicKey: '',
+    },
   },
 
   compatibilityDate: '2026-10-01',
@@ -62,6 +75,47 @@ export default defineNuxtConfig({
   eslint: {
     config: {
       stylistic: true,
+    },
+  },
+
+  // The installable app (spec, "Stack and hosting"). iOS sends notifications
+  // only to an app added to the home screen.
+  pwa: {
+    registerType: 'autoUpdate',
+    // A service worker of our own, for push (`service-worker/sw.ts`). Paths are
+    // relative to the Vite root, `app/`.
+    strategies: 'injectManifest',
+    srcDir: '../service-worker',
+    filename: 'sw.ts',
+    // No precaching: page loads always reach the server (see `sw.ts`).
+    injectManifest: { injectionPoint: undefined },
+    // Serves both files with explicit headers on every preset (vite-pwa/nuxt#228):
+    // the manifest typed `application/manifest+json`, neither cached by the browser.
+    registerWebManifestInRouteRules: true,
+    manifest: {
+      id: '/',
+      name: 'Veille MAX',
+      short_name: 'Veille MAX',
+      description: 'Les meilleurs trains MAX JEUNE de vos week-ends, chaque matin.',
+      lang: 'fr',
+      start_url: '/',
+      // Notifications only open addresses inside it.
+      scope: '/',
+      display: 'standalone',
+      // The manifest takes one colour: the light theme's canvas. The `theme-color`
+      // meta tags above, which win over it, give each theme its own.
+      theme_color: '#f5f5f4',
+      background_color: '#f5f5f4',
+      // Drawn from the favicon by `npm run pwa:icons` (pwa-assets.config.ts).
+      icons: [
+        { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+        { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+        { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+      ],
+    },
+    client: {
+      // Registers the service worker on every page; the notification settings wait for it.
+      registerPlugin: true,
     },
   },
 
