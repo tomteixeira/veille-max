@@ -4,7 +4,7 @@ Veille MAX tracks MAX JEUNE seat availability on a traveller's preferred routes.
 
 > Veille MAX is not affiliated with SNCF Voyageurs or SNCF Connect. Availability comes from the SNCF open data (`tgvmax` dataset, ODbL licence).
 
-**Status:** walking skeleton plus sign-in. The app shell, email-code sign-in, the local Supabase stack and the CI pipeline are in place; features land ticket by ticket (see [the v1 spec](.scratch/veille-max-v1/spec.md) and [its tickets](.scratch/veille-max-v1/issues/)).
+**Status:** walking skeleton, sign-in and the trip template. The app shell, email-code sign-in, the default configuration in Réglages (« Votre week-end type »), the local Supabase stack and the CI pipeline are in place; features land ticket by ticket (see [the v1 spec](.scratch/veille-max-v1/spec.md) and [its tickets](.scratch/veille-max-v1/issues/)).
 
 ## Stack
 
@@ -36,24 +36,27 @@ Sign in as the seeded traveller `voyageur@veille-max.test`: the code arrives in 
 | `npm run build` / `npm run preview` | Builds the app for production and serves the build. |
 | `npm run lint` / `npm run lint:fix` | ESLint, including code style (no Prettier). |
 | `npm run typecheck` | `vue-tsc` over the app, the server, the shared code and the tests. |
-| `npm test` | Vitest, once. `npm run test:watch` keeps it running. |
+| `npm test` | Vitest, once: the unit tests and the integration tests, which need the local stack. |
+| `npm run test:unit` / `npm run test:integration` | One Vitest project only. `npm run test:watch` keeps the unit tests running. |
 | `npm run test:e2e` | Playwright against a production build connected to the local stack. |
 | `npm run supabase:start` / `supabase:stop` | Starts or stops the local Supabase stack. |
 | `npm run supabase:env` | Writes `.env` from the running local stack. |
 | `npm run db:reset` | Recreates the local database from the migrations and `supabase/seed.sql`. |
 | `npm run db:types` | Regenerates [`shared/types/database.types.ts`](shared/types/database.types.ts) from the local database. |
+| `npm run stations:refresh` | Writes a migration that refreshes the station reference (see Database). |
 
 ## Tests
 
 The testing approach is described in the spec's "Testing Decisions":
 
-- **Unit tests** (`test/unit`, Vitest) exercise pure code through its public entry point. The domain core will hold most of them.
+- **Unit tests** (`test/unit`, Vitest) exercise pure code through its public entry point, such as the trip template rules in [`shared/domain`](shared/domain).
+- **Integration tests** (`test/integration`, Vitest) run against the local Supabase stack, through the Data API with the publishable key, as the app does. Each test invites throwaway travellers with the secret key, signs them in without sending an email, and deletes them afterwards. They cover what the database guarantees, row-level security first.
 - **End-to-end tests** (`test/e2e`, Playwright) drive a production build of the app, connected to the local Supabase stack, on a mobile viewport. A setup project ([`auth.setup.ts`](test/e2e/auth.setup.ts)) first signs the seeded traveller in through the sign-in screen, with the code read from the mail catcher. Every test then starts signed in as that traveller, unless it sets its own `storageState`.
 
 ```bash
-npm test
+npm test                         # unit and integration tests; needs the local stack and .env (see Getting started)
 npx playwright install chromium  # once
-npm run test:e2e                 # needs the local stack and .env (see Getting started)
+npm run test:e2e                 # needs the local stack and .env
 ```
 
 ## Database
@@ -61,6 +64,20 @@ npm run test:e2e                 # needs the local stack and .env (see Getting s
 - Create a migration with `npx supabase migration new <name>`, write it, then `npm run db:reset` to apply it locally and `npm run db:types` to refresh the generated types.
 - Functions are private by default: a migration grants `execute` explicitly to the roles that may call a function (see the initial migration).
 - Every traveller-owned row carries a `user_id` protected by row-level security; availability data is global ([ADR 0002](docs/adr/0002-multi-user-schema-shared-availability.md)).
+- **Trip template:** `template_legs` (one row per traveller and leg) and `template_routes` (its ranked routes). A traveller who never saved a leg gets the default from [`shared/domain/trip-template.ts`](shared/domain/trip-template.ts): Friday outbound, Sunday return, no routes. The app saves a leg with its routes in one call to `save_template_leg`, which runs under the caller's RLS.
+
+### Station reference
+
+`public.stations` maps the 5-character SNCF codes of the `tgvmax` dataset to full station names. Signed-in travellers can read it; only migrations write it. The names come from [trainline-eu/stations](https://github.com/trainline-eu/stations) (ODbL, `sncf_id` column). The 10 codes that the dataset only names at city level (« PARIS (intramuros) », Lyon, Lille) have hand-written names in the script. A code that trainline does not know keeps the dataset's name.
+
+To refresh it, for example when a new station appears in the dataset:
+
+```bash
+npm run stations:refresh  # writes supabase/migrations/<timestamp>_refresh_stations.sql
+npx supabase migration up --local
+```
+
+The script reads the dataset's current codes and trainline's latest `stations.csv`. It prints the codes that had to fall back to the dataset's name. Review the generated migration, then commit it: merging it to `main` applies it to the hosted project. The migration only upserts, so a station that left the dataset is kept for the routes that still use it.
 
 `GET /api/health` returns `{ "status": "ok", "database": "ok" }` when the server reaches Postgres through Supabase, and a 503 otherwise.
 
@@ -87,7 +104,7 @@ npm run test:e2e                 # needs the local stack and .env (see Getting s
 
 ## CI/CD
 
-- **Every pull request** ([`ci.yml`](.github/workflows/ci.yml)) runs lint, typecheck and Vitest, and, in a parallel job, Playwright against a local Supabase stack started with the CLI.
+- **Every pull request** ([`ci.yml`](.github/workflows/ci.yml)) runs lint, typecheck and the Vitest unit tests (`npm run test:unit`). A parallel job starts a local Supabase stack with the CLI and runs the integration tests and Playwright against it.
 - **Every merge to `main`** applies the migrations to the hosted Supabase project ([`migrations.yml`](.github/workflows/migrations.yml)), and Vercel deploys the app through its Git integration.
 
 ## Deploy
@@ -108,9 +125,12 @@ One-time setup:
 ```text
 app/                 Nuxt app: pages, layouts, components, styles
 server/              Nitro server routes
-shared/              Code shared by the app and the server (the domain core will live here)
+shared/domain/       Domain rules, pure TypeScript (the trip template; the domain core will join it)
+shared/utils/        Code shared by the app and the server (Paris time, trip template storage)
+scripts/             Developer scripts (local .env, station reference refresh)
 supabase/            Supabase CLI config, migrations, seed and email templates
-test/unit/           Vitest tests
+test/unit/           Vitest unit tests
+test/integration/    Vitest tests against the local Supabase stack
 test/e2e/            Playwright tests
 docs/                ADRs and research notes
 .scratch/            Spec and tickets (local issue tracker)

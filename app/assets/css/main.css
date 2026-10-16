@@ -19,6 +19,14 @@
   --shadow-float: 0 18px 40px -12px rgb(0 0 0 / 0.45);
 
   --tracking-eyebrow: 0.16em;
+
+  --animate-sheet-up: sheet-up 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
 }
 
 @theme inline {
@@ -131,6 +139,11 @@
   body {
     min-height: 100dvh;
     font-family: var(--font-sans);
+  }
+
+  /* The page behind an open sheet (<BottomSheet />) stays still. */
+  html:has(dialog[open]) {
+    overflow: hidden;
   }
 
   :focus-visible {
