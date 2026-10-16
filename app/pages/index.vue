@@ -5,6 +5,7 @@ useHead({ title: 'Accueil' })
 
 // Computed once on the server so the hydrated page shows the same day.
 const today = useState('home-today', () => formatParisLongDay(new Date()))
+const lastSnapshot = await useLastSnapshotTime()
 
 // Placeholder halves until the traveller has a trip template (ticket 03).
 const legs = [
@@ -45,7 +46,17 @@ const steps = [
         >
           0/6 réservés
         </AppChip>
-        <AppChip tone="surface">
+        <AppChip
+          v-if="lastSnapshot"
+          tone="surface"
+          class="tnum"
+        >
+          <span><span class="text-ink-muted">Dernier instantané :</span> {{ lastSnapshot }}</span>
+        </AppChip>
+        <AppChip
+          v-else
+          tone="surface"
+        >
           <span class="text-ink-muted">En attente du premier instantané</span>
         </AppChip>
       </div>

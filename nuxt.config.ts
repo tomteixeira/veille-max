@@ -24,6 +24,11 @@ export default defineNuxtConfig({
 
   css: ['~/assets/css/main.css'],
 
+  runtimeConfig: {
+    // Shared with the `pg_cron` job that calls the tick endpoint (`NUXT_TICK_SECRET`).
+    tickSecret: '',
+  },
+
   compatibilityDate: '2026-10-01',
 
   // Vercel builds pick the `vercel` Nitro preset on their own (zero config),
@@ -35,6 +40,8 @@ export default defineNuxtConfig({
         regions: ['cdg1'],
         // Nitro would cap the runtime at Node 22; match `engines` instead.
         runtime: 'nodejs24.x',
+        // The tick ingests a snapshot within one call; pg_net waits up to 120 s for it.
+        maxDuration: 300,
       },
     },
   },

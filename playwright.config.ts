@@ -41,5 +41,7 @@ export default defineConfig({
     reuseExistingServer: !isCI,
     timeout: 240_000,
     stdout: 'pipe',
+    // The tick endpoint refuses every call while no secret is set: give it one to check.
+    env: { NUXT_TICK_SECRET: 'e2e-tick-secret' },
   },
 })
