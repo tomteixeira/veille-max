@@ -1,0 +1,77 @@
+import { expect } from '@playwright/test'
+import { createClient } from '@supabase/supabase-js'
+import type { TemplateLeg } from '../../../shared/domain/trip-template'
+import type { Database } from '../../../shared/types/database.types'
+
+/** The server role of the local stack, which bypasses RLS: for arranging and cleaning up. */
+function admin() {
+  return createClient<Database>(process.env.NUXT_PUBLIC_SUPABASE_URL!, process.env.NUXT_SUPABASE_SECRET_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+}
+
+/** Saves a traveller's trip template straight to the database, without going through Réglages. */
+export async function saveTripTemplate(travellerId: string, legs: { outbound: TemplateLeg, return: TemplateLeg }): Promise<void> {
+  const db = admin()
+  for (const kind of ['outbound', 'return'] as const) {
+    const leg = legs[kind]
+    const saved = await db.from('template_legs').insert({
+      user_id: travellerId,
+      kind,
+      weekday: leg.weekday,
+      anchor: leg.anchor,
+      window_start: leg.window.start,
+      window_end: leg.window.end,
+      ideal_time: leg.idealTime,
+    })
+    expect(saved.error).toBeNull()
+    const routes = await db.from('template_routes').insert(leg.routes.map((route, index) => ({
+      user_id: travellerId,
+      leg_kind: kind,
+      rank: index + 1,
+      origin_code: route.originCode,
+      destination_code: route.destinationCode,
+    })))
+    expect(routes.error).toBeNull()
+  }
+}
+
+/** A train a fixture snapshot lists. */
+export interface FixtureTrain {
+  date: string
+  trainNumber: string
+  originCode: string
+  destinationCode: string
+  departureTime: string
+  arrivalTime: string
+  open: boolean
+}
+
+/**
+ * Records a snapshot taken now, listing `trains`, as the tick would ingest it:
+ * it becomes the latest snapshot. Returns its id, for `removeSnapshot`.
+ */
+export async function recordSnapshot(trains: readonly FixtureTrain[]): Promise<number> {
+  const now = new Date().toISOString()
+  const { data, error } = await admin().rpc('record_snapshot', {
+    processed_at: now,
+    ingested_at: now,
+    trains: trains.map(train => ({
+      date: train.date,
+      train_number: train.trainNumber,
+      origin_code: train.originCode,
+      destination_code: train.destinationCode,
+      departure_time: train.departureTime,
+      arrival_time: train.arrivalTime,
+      open: train.open,
+    })),
+  })
+  expect(error).toBeNull()
+  return (data as { snapshot_id: number }).snapshot_id
+}
+
+/** Deletes a snapshot, and with it the observations and openings it created. */
+export async function removeSnapshot(snapshotId: number): Promise<void> {
+  const { error } = await admin().from('snapshots').delete().eq('id', snapshotId)
+  expect(error).toBeNull()
+}

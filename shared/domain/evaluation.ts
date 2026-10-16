@@ -1,0 +1,184 @@
+/**
+ * The domain core (spec, "Domain core"): pure code, no I/O, no framework.
+ * `evaluate` is its single entry point: from the current instant, the
+ * traveller's settings and the latest snapshot's train observations, it
+ * generates the trips of the tracking horizon and ranks each leg's candidates.
+ */
+import { addDays, parisDate, type ParisDate } from '../utils/paris-time'
+import type { LegKind, LocalTime, Route, TemplateLeg, TripTemplate, Weekday } from './trip-template'
+
+/** How many days after today trips are tracked: the MAX JEUNE booking window (CONTEXT.md, Tracking Horizon). */
+export const TRACKING_HORIZON_DAYS = 30
+
+/** How many minutes outside the time window one step of route rank is worth, unless the traveller sets it (CONTEXT.md, Route Weight). */
+export const DEFAULT_ROUTE_WEIGHT = 30
+
+export interface TravellerSettings {
+  template: TripTemplate
+  /** Minutes per route rank when ranking out-of-window candidates; `DEFAULT_ROUTE_WEIGHT` when not set. */
+  routeWeight?: number
+}
+
+/** A train the latest snapshot lists on a route and date, with whether it has an open MAX JEUNE seat. */
+export interface TrainObservation extends Route {
+  date: ParisDate
+  trainNumber: string
+  /** Paris time. An arrival earlier than the departure is on the next day. */
+  departureTime: LocalTime
+  arrivalTime: LocalTime
+  open: boolean
+}
+
+export interface EvaluationInput {
+  now: Date
+  settings: TravellerSettings
+  observations: readonly TrainObservation[]
+}
+
+/** A train with an open seat on one of a leg's routes, on the leg's date, in the latest snapshot. */
+export interface Candidate {
+  train: TrainObservation
+  /** The rank of the train's route among the leg's routes; 1 is the most preferred. */
+  routeRank: number
+  /** Whether the train's time on the leg's anchor satisfies every bound of its time window. */
+  inWindow: boolean
+  /** How far the train's anchor time is outside the time window, 0 inside it. */
+  minutesOutsideWindow: number
+  /** How far the train's anchor time is from the ideal time. */
+  minutesFromIdeal: number
+  durationMinutes: number
+}
+
+/**
+ * Where a leg stands:
+ * - `available`: its best candidate is inside the time window;
+ * - `outside-window`: it only has candidates outside the time window;
+ * - `none`: it has no candidate;
+ * - `past`: its date has passed, while its trip is still tracked.
+ */
+export type LegStatus = 'available' | 'outside-window' | 'none' | 'past'
+
+export interface Leg {
+  kind: LegKind
+  date: ParisDate
+  status: LegStatus
+  /** In ranking order. */
+  candidates: Candidate[]
+  /** The top-ranked candidate, `null` when the leg has none. */
+  best: Candidate | null
+}
+
+export interface Trip {
+  /** The ISO year-week of the trip's default outbound date, « 2026-W43 ». */
+  key: string
+  legs: Record<LegKind, Leg>
+}
+
+export interface Evaluation {
+  /** The tracked trips, soonest first. */
+  trips: Trip[]
+}
+
+export function evaluate({ now, settings, observations }: EvaluationInput): Evaluation {
+  const today = parisDate(now)
+  const horizonEnd = addDays(today, TRACKING_HORIZON_DAYS)
+  const { outbound, return: returnLeg } = settings.template
+  const returnOffset = (returnLeg.weekday - outbound.weekday + 7) % 7
+  const routeWeight = settings.routeWeight ?? DEFAULT_ROUTE_WEIGHT
+
+  const trips: Trip[] = []
+  // The template's outbound weekday in the week before today's, then every week after it.
+  let outboundDate = addDays(today, outbound.weekday - weekday(today) - 7)
+  for (; outboundDate <= horizonEnd; outboundDate = addDays(outboundDate, 7)) {
+    const returnDate = addDays(outboundDate, returnOffset)
+    if (returnDate < today) continue
+    trips.push({
+      key: isoWeek(outboundDate),
+      legs: {
+        outbound: evaluateLeg('outbound', outboundDate, today, outbound, routeWeight, observations),
+        return: evaluateLeg('return', returnDate, today, returnLeg, routeWeight, observations),
+      },
+    })
+  }
+  return { trips }
+}
+
+function evaluateLeg(kind: LegKind, date: ParisDate, today: ParisDate, templateLeg: TemplateLeg, routeWeight: number, observations: readonly TrainObservation[]): Leg {
+  if (date < today) return { kind, date, status: 'past', candidates: [], best: null }
+
+  const candidates: Candidate[] = []
+  for (const train of observations) {
+    if (!train.open || train.date !== date) continue
+    const routeIndex = templateLeg.routes.findIndex(route => route.originCode === train.originCode && route.destinationCode === train.destinationCode)
+    if (routeIndex >= 0) candidates.push(rankedCandidate(train, routeIndex + 1, templateLeg))
+  }
+  candidates.sort((a, b) => compareCandidates(a, b, routeWeight))
+  const best = candidates[0] ?? null
+  const status = best === null ? 'none' : best.inWindow ? 'available' : 'outside-window'
+  return { kind, date, status, candidates, best }
+}
+
+/** A candidate with what the ranking reads of it: its time against the leg's window and ideal time. */
+function rankedCandidate(train: TrainObservation, routeRank: number, { anchor, window, idealTime }: TemplateLeg): Candidate {
+  const departure = minutes(train.departureTime)
+  let arrival = minutes(train.arrivalTime)
+  // An arrival earlier than the departure is on the next day.
+  if (arrival < departure) arrival += MINUTES_PER_DAY
+  const anchorTime = anchor === 'departure' ? departure : arrival
+
+  const start = window.start === null ? null : minutes(window.start)
+  const end = window.end === null ? null : minutes(window.end)
+  let minutesOutsideWindow = 0
+  if (start !== null && anchorTime < start) minutesOutsideWindow = start - anchorTime
+  else if (end !== null && anchorTime > end) minutesOutsideWindow = anchorTime - end
+
+  return {
+    train,
+    routeRank,
+    inWindow: minutesOutsideWindow === 0,
+    minutesOutsideWindow,
+    minutesFromIdeal: Math.abs(anchorTime - minutes(idealTime)),
+    durationMinutes: arrival - departure,
+  }
+}
+
+/**
+ * The ranking (spec, "Ranking rules"): in-window candidates first, by route
+ * rank, then closeness to the ideal time, then earlier departure; then
+ * out-of-window candidates, by minutes outside the window plus the route
+ * weight for each rank below 1, then route rank, then earlier departure.
+ */
+function compareCandidates(a: Candidate, b: Candidate, routeWeight: number): number {
+  if (a.inWindow !== b.inWindow) return a.inWindow ? -1 : 1
+  const rankingKeys = (candidate: Candidate) => candidate.inWindow
+    ? [candidate.routeRank, candidate.minutesFromIdeal, minutes(candidate.train.departureTime)]
+    : [candidate.minutesOutsideWindow + routeWeight * (candidate.routeRank - 1), candidate.routeRank, minutes(candidate.train.departureTime)]
+  const [aKeys, bKeys] = [rankingKeys(a), rankingKeys(b)]
+  for (const [index, aKey] of aKeys.entries()) {
+    const difference = aKey - bKeys[index]!
+    if (difference !== 0) return difference
+  }
+  return 0
+}
+
+const MINUTES_PER_DAY = 24 * 60
+
+/** The minutes since midnight of « HH:MM ». */
+function minutes(time: LocalTime): number {
+  const [hours, mins] = time.split(':').map(Number)
+  return hours! * 60 + mins!
+}
+
+/** The ISO weekday of a calendar day. */
+function weekday(date: ParisDate): Weekday {
+  return ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7 + 1) as Weekday
+}
+
+/** « 2026-W43 »: the ISO year and week of a calendar day. */
+function isoWeek(date: ParisDate): string {
+  // The ISO week is the week of its Thursday, and its year is that Thursday's.
+  const thursday = new Date(`${addDays(date, 4 - weekday(date))}T00:00:00Z`)
+  const year = thursday.getUTCFullYear()
+  const week = Math.floor((thursday.getTime() - Date.UTC(year, 0, 1)) / (7 * 24 * 3600 * 1000)) + 1
+  return `${year}-W${String(week).padStart(2, '0')}`
+}
