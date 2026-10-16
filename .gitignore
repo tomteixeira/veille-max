@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+
+# Nuxt / Nitro build output
+.nuxt/
+.output/
+.data/
+.nitro/
+.cache/
+dist/
+
+# Tests
+coverage/
+playwright-report/
+test-results/
+blob-report/
+
+# Env files (see .env.example)
+.env
+.env.*
+!.env.example
+
+# Supabase CLI local state
+supabase/.branches/
+supabase/.temp/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+
+# Throwaway UI prototype: it lives on the `prototype/ui-variants` branch, not on main
+.scratch/*/prototype-ui/

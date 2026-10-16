@@ -1,0 +1,3 @@
+# Supabase pg_cron drives background jobs through a single Nitro tick endpoint
+
+The app is hosted on Vercel Hobby, whose cron runs at most once a day with up to an hour of jitter, and GitHub Actions schedules have been observed running hours late. Instead, Supabase `pg_cron` calls a secret-protected Nitro endpoint (`/api/cron/tick`) through `pg_net` every 15 minutes. The endpoint decides what is due: ingest the snapshot when the SNCF `data_processed` timestamp has changed, send Confirmation Reminders at noon Paris time. All job logic stays in Node (no Deno Edge Functions), it is robust to DST and late publication, and the regular traffic keeps the free Supabase project from being paused.
