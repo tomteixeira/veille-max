@@ -1,18 +1,21 @@
 <!--
   One half of a home ticket: a leg of a tracked trip, with its status and its
-  best candidate in the latest snapshot. Tapping anywhere on it opens its leg view.
+  booked train, or else its best candidate in the latest snapshot. Tapping
+  anywhere on it opens its leg view.
 -->
 <script setup lang="ts">
 import { ArrowRight } from '@lucide/vue'
 import type { Leg } from '#shared/domain/evaluation'
 
-defineProps<{
+const props = defineProps<{
   tripKey: string
   leg: Leg
   stationName: (code: string) => string
 }>()
 
 const headingId = useId()
+/** The train the half shows: the booking, or else the best candidate. */
+const shown = computed(() => props.leg.booking ?? props.leg.best)
 </script>
 
 <template>
@@ -33,23 +36,25 @@ const headingId = useId()
           {{ LEG_NAMES[leg.kind] }} · {{ shortDay(leg.date) }}
         </NuxtLink>
       </h3>
-      <AppChip>{{ LEG_STATUS_NAMES[leg.status] }}</AppChip>
+      <AppChip :tone="leg.status === 'booked' && !leg.muted ? 'booked' : 'muted'">
+        {{ legChip(leg) }}
+      </AppChip>
     </div>
 
-    <template v-if="leg.best">
+    <template v-if="shown">
       <p class="tnum mt-2 flex items-center gap-2">
-        <span class="text-[36px] leading-none font-extrabold tracking-tight">{{ leg.best.train.departureTime }}</span>
+        <span class="text-[36px] leading-none font-extrabold tracking-tight">{{ shown.train.departureTime }}</span>
         <ArrowRight
           :size="18"
           class="text-ink-faint"
           aria-label="à"
         />
-        <span class="text-[36px] leading-none font-extrabold tracking-tight text-ink-faint">{{ leg.best.train.arrivalTime }}</span>
+        <span class="text-[36px] leading-none font-extrabold tracking-tight text-ink-faint">{{ shown.train.arrivalTime }}</span>
       </p>
       <!-- A long route name gives way; the duration stays whole. -->
       <p class="mt-2 flex text-[13px] font-medium whitespace-pre text-ink-muted">
-        <span class="truncate">{{ routeName(leg.best.train, stationName) }}</span>
-        <span class="shrink-0"> · {{ durationText(leg.best.durationMinutes) }}</span>
+        <span class="truncate">{{ routeName(shown.train, stationName) }}</span>
+        <span class="shrink-0"> · {{ durationText(shown.durationMinutes) }}</span>
       </p>
     </template>
     <template v-else>

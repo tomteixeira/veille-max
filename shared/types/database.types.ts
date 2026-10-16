@@ -23,7 +23,87 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "openings": {
+            "bookings": {
+                  Row: {
+                    "booked_at": string,"destination_code": string,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string,"train_number": string,"travel_date": string,"trip_key": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "booked_at"?: string,"destination_code": string,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string,"train_number": string,"travel_date": string,"trip_key": string,"user_id"?: string
+                  }
+                  Update: {
+                    "booked_at"?: string,"destination_code"?: string,"leg_kind"?: Database["public"]['Enums']["leg_kind"],"origin_code"?: string,"train_number"?: string,"travel_date"?: string,"trip_key"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "bookings_travel_date_train_number_origin_code_destination__fkey"
+      columns: ["travel_date","train_number","origin_code","destination_code"]
+isOneToOne: false
+      referencedRelation: "train_observations"
+      referencedColumns: ["travel_date","train_number","origin_code","destination_code"]
+    }
+                  ]
+                },"customised_trip_legs": {
+                  Row: {
+                    "anchor": Database["public"]['Enums']["time_anchor"],"ideal_time": string,"kind": Database["public"]['Enums']["leg_kind"],"travel_date": string,"trip_key": string,"user_id": string,"window_end": string | null,"window_start": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "anchor": Database["public"]['Enums']["time_anchor"],"ideal_time": string,"kind": Database["public"]['Enums']["leg_kind"],"travel_date": string,"trip_key": string,"user_id"?: string,"window_end"?: string | null,"window_start"?: string | null
+                  }
+                  Update: {
+                    "anchor"?: Database["public"]['Enums']["time_anchor"],"ideal_time"?: string,"kind"?: Database["public"]['Enums']["leg_kind"],"travel_date"?: string,"trip_key"?: string,"user_id"?: string,"window_end"?: string | null,"window_start"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"customised_trip_routes": {
+                  Row: {
+                    "destination_code": string,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string,"rank": number,"trip_key": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "destination_code": string,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string,"rank": number,"trip_key": string,"user_id"?: string
+                  }
+                  Update: {
+                    "destination_code"?: string,"leg_kind"?: Database["public"]['Enums']["leg_kind"],"origin_code"?: string,"rank"?: number,"trip_key"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "customised_trip_routes_destination_code_fkey"
+      columns: ["destination_code"]
+isOneToOne: false
+      referencedRelation: "stations"
+      referencedColumns: ["code"]
+    },{
+      foreignKeyName: "customised_trip_routes_origin_code_fkey"
+      columns: ["origin_code"]
+isOneToOne: false
+      referencedRelation: "stations"
+      referencedColumns: ["code"]
+    },{
+      foreignKeyName: "customised_trip_routes_user_id_trip_key_leg_kind_fkey"
+      columns: ["user_id","trip_key","leg_kind"]
+isOneToOne: false
+      referencedRelation: "customised_trip_legs"
+      referencedColumns: ["user_id","trip_key","kind"]
+    }
+                  ]
+                },"mutes": {
+                  Row: {
+                    "leg_kind": Database["public"]['Enums']["leg_kind"] | null,"trip_key": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "leg_kind"?: Database["public"]['Enums']["leg_kind"] | null,"trip_key": string,"user_id"?: string
+                  }
+                  Update: {
+                    "leg_kind"?: Database["public"]['Enums']["leg_kind"] | null,"trip_key"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"openings": {
                   Row: {
                     "first_snapshot_id": number,"id": number,"is_open": boolean,"last_snapshot_id": number,"observation_id": number
                   }
@@ -210,11 +290,14 @@ isOneToOne: false
 "register_push_device":
 { Args: { "auth": string,"device_label": string,"endpoint": string,"p256dh": string }; Returns: undefined
                            },
+"save_customised_trip":
+{ Args: { "legs": Json,"trip_key": string }; Returns: undefined
+                           },
 "save_template_leg":
 { Args: { "anchor": Database["public"]['Enums']["time_anchor"],"ideal_time": string,"kind": Database["public"]['Enums']["leg_kind"],"routes": Json,"weekday": number,"window_end"?: string,"window_start"?: string }; Returns: undefined
                            },
 "tracked_routes":
-{ Args: Record<PropertyKey, never>; Returns: {
+{ Args: { "from_date": string,"to_date": string }; Returns: {
               "destination_code": string,"origin_code": string
             }[]
                            }

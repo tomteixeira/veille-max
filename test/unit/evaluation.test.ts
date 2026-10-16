@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { evaluate, type TrainObservation, type TravellerSettings } from '#shared/domain/evaluation'
+import { evaluate, type Booking, type TrainObservation, type TravellerSettings } from '#shared/domain/evaluation'
 import { defaultTripTemplate, type Route, type TemplateLeg } from '#shared/domain/trip-template'
 
 const parisLyonToPartDieu: Route = { originCode: 'FRPLY', destinationCode: 'FRLPD' }
@@ -11,7 +11,7 @@ const partDieuToParisLyon: Route = { originCode: 'FRLPD', destinationCode: 'FRPL
 const fridayMorning = new Date('2026-10-16T04:40:00Z')
 
 /** The default template (Friday out, arrive before 10:00, ideally 09:00; Sunday back, leave after 14:00, ideally 17:00), with routes. */
-function settings({ outbound = {}, returnLeg = {}, routeWeight }: { outbound?: Partial<TemplateLeg>, returnLeg?: Partial<TemplateLeg>, routeWeight?: number } = {}): TravellerSettings {
+function settings({ outbound = {}, returnLeg = {}, routeWeight, bookings }: { outbound?: Partial<TemplateLeg>, returnLeg?: Partial<TemplateLeg>, routeWeight?: number, bookings?: Booking[] } = {}): TravellerSettings {
   const template = defaultTripTemplate()
   return {
     template: {
@@ -19,6 +19,7 @@ function settings({ outbound = {}, returnLeg = {}, routeWeight }: { outbound?: P
       return: { ...template.return, routes: [partDieuToParisLyon], ...returnLeg },
     },
     routeWeight,
+    bookings,
   }
 }
 
@@ -138,8 +139,8 @@ describe('evaluation', () => {
     it('come with each leg: its window, ideal time and ranked routes', () => {
       const leg = evaluate({ now: fridayMorning, settings: settings(), observations: [] }).trips[1]?.legs.outbound
 
+      // The leg's day is its date, which a customised trip can move off the template's weekday.
       expect(leg?.settings).toEqual({
-        weekday: 5,
         anchor: 'arrival',
         window: { start: null, end: '10:00' },
         idealTime: '09:00',
@@ -293,6 +294,111 @@ describe('evaluation', () => {
 
       expect(leg?.candidates.map(({ train, minutesOutsideWindow, durationMinutes }) => [train.trainNumber, minutesOutsideWindow, durationMinutes]))
         .toEqual([['arrives-23:50', 20, 120], ['arrives-00:10', 40, 130]])
+    })
+  })
+
+  describe('bookings', () => {
+    /** The booking of `trainObservation` on a leg; the booked train may show no seat any more. */
+    function booking(tripKey: string, legKind: 'outbound' | 'return', { open: _open, ...bookedTrain }: TrainObservation): Booking {
+      return { tripKey, legKind, train: bookedTrain }
+    }
+
+    it('show on their leg, ranked with the same rules as candidates', () => {
+      // Route 2 booked, leaving at 07:10; route 1 leaving at 06:05 then appears: it ranks above the booking.
+      const booked = train('6611', parisLyonToPerrache, '2026-10-23', '07:10', '09:06', false)
+      const observations = [
+        booked,
+        train('6601', parisLyonToPartDieu, '2026-10-23', '06:05', '08:01'),
+        train('6615', parisLyonToPerrache, '2026-10-23', '08:04', '10:00'),
+        train('6631', chessyToPartDieu, '2026-10-23', '09:00', '11:00'),
+      ]
+
+      const leg = evaluate({ now: fridayMorning, settings: settings({ bookings: [booking('2026-W43', 'outbound', booked)] }), observations }).trips[1]?.legs.outbound
+
+      expect(leg?.booking).toMatchObject({
+        train: { trainNumber: '6611', departureTime: '07:10' },
+        routeRank: 2,
+        inWindow: true,
+        minutesFromIdeal: 6,
+        durationMinutes: 116,
+        candidatesAbove: 1,
+      })
+      expect(leg?.candidates.slice(0, leg.booking!.candidatesAbove).map(({ train }) => train.trainNumber)).toEqual(['6601'])
+    })
+
+    it('rank above every worse candidate, and level with their own train when it still has a seat', () => {
+      const booked = train('6601', parisLyonToPartDieu, '2026-10-23', '06:05', '08:01')
+      const observations = [
+        booked,
+        train('6611', parisLyonToPerrache, '2026-10-23', '07:10', '09:06'),
+      ]
+
+      const leg = evaluate({ now: fridayMorning, settings: settings({ bookings: [booking('2026-W43', 'outbound', booked)] }), observations }).trips[1]?.legs.outbound
+
+      expect(leg?.booking?.candidatesAbove).toBe(0)
+      expect(leg?.candidates.map(({ train }) => train.trainNumber)).toEqual(['6601', '6611'])
+    })
+
+    it('rank out of the window with the route weight, as candidates do', () => {
+      // Route 1 arrives 60 minutes late; booked route 3 arrives 25 minutes late.
+      const booked = train('6631', chessyToPartDieu, '2026-10-23', '08:27', '10:25')
+      const observations = [booked, train('6609', parisLyonToPartDieu, '2026-10-23', '09:04', '11:00')]
+      const bookings = [booking('2026-W43', 'outbound', booked)]
+
+      const weighed30 = evaluate({ now: fridayMorning, settings: settings({ bookings, routeWeight: 30 }), observations }).trips[1]?.legs.outbound
+      const weighed10 = evaluate({ now: fridayMorning, settings: settings({ bookings, routeWeight: 10 }), observations }).trips[1]?.legs.outbound
+
+      expect(weighed30?.booking).toMatchObject({ inWindow: false, minutesOutsideWindow: 25, candidatesAbove: 1 })
+      expect(weighed10?.booking?.candidatesAbove).toBe(0)
+    })
+
+    it('rank below every candidate once their route is no longer among the leg’s routes', () => {
+      const booked = train('8501', { originCode: 'FRPMO', destinationCode: 'FRLPD' }, '2026-10-23', '07:52', '08:58')
+      const observations = [
+        booked,
+        train('6601', parisLyonToPartDieu, '2026-10-23', '06:05', '08:01'),
+        train('6631', chessyToPartDieu, '2026-10-23', '09:00', '11:00'),
+      ]
+
+      const leg = evaluate({ now: fridayMorning, settings: settings({ bookings: [booking('2026-W43', 'outbound', booked)] }), observations }).trips[1]?.legs.outbound
+
+      expect(leg?.booking).toMatchObject({ train: { trainNumber: '8501' }, routeRank: null, inWindow: true, candidatesAbove: 2 })
+      expect(leg?.candidates.map(({ train }) => train.trainNumber)).toEqual(['6601', '6631'])
+    })
+
+    it('rank below every candidate when the booked train runs on another day than the leg', () => {
+      // Booked on Thursday, then the template moved the outbound leg to Friday.
+      const booked = train('6601', parisLyonToPartDieu, '2026-10-22', '06:05', '08:01')
+      const observations = [train('6631', chessyToPartDieu, '2026-10-23', '09:00', '11:00')]
+
+      const leg = evaluate({ now: fridayMorning, settings: settings({ bookings: [booking('2026-W43', 'outbound', booked)] }), observations }).trips[1]?.legs.outbound
+
+      expect(leg?.booking).toMatchObject({ train: { date: '2026-10-22' }, candidatesAbove: 1 })
+    })
+
+    it('mark their leg as booked, and leave every other leg without one', () => {
+      const booked = train('6680', partDieuToParisLyon, '2026-10-25', '17:04', '19:00', false)
+
+      const { trips } = evaluate({ now: fridayMorning, settings: settings({ bookings: [booking('2026-W43', 'return', booked)] }), observations: [] })
+
+      expect(trips[1]?.legs.return).toMatchObject({ status: 'booked', booking: { train: { trainNumber: '6680' } } })
+      expect(trips[1]?.legs.outbound).toMatchObject({ status: 'none', booking: null })
+      expect(trips[0]?.legs.return.booking).toBeNull()
+    })
+
+    it('count as active until their leg has passed', () => {
+      const bookings = [
+        booking('2026-W42', 'outbound', train('6601', parisLyonToPartDieu, '2026-10-16', '06:05', '08:01')),
+        booking('2026-W43', 'outbound', train('6611', parisLyonToPerrache, '2026-10-23', '07:10', '09:06')),
+        booking('2026-W43', 'return', train('6680', partDieuToParisLyon, '2026-10-25', '17:04', '19:00')),
+      ]
+
+      const friday = evaluate({ now: fridayMorning, settings: settings({ bookings }), observations: [] })
+      const saturday = evaluate({ now: new Date('2026-10-17T10:00:00Z'), settings: settings({ bookings }), observations: [] })
+
+      expect(friday.activeBookings).toBe(3)
+      expect(saturday.activeBookings).toBe(2)
+      expect(evaluate({ now: fridayMorning, settings: settings(), observations: [] }).activeBookings).toBe(0)
     })
   })
 })

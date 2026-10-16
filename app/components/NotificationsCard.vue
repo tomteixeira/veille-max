@@ -9,8 +9,6 @@ import { Laptop, Monitor, Smartphone, Tablet } from '@lucide/vue'
 const { devices, state, isThisDevice, thisDevice, turnOn, turnOff, sendTest } = await usePushNotifications()
 
 const titleId = useId()
-const switchLabelId = useId()
-const switchHintId = useId()
 
 const switching = ref(false)
 const switchFailed = ref(false)
@@ -95,29 +93,14 @@ const dateFormat = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'sh
       Notifications
     </h2>
 
-    <div class="mt-3 flex items-center gap-4">
-      <div class="flex-1">
-        <p
-          :id="switchLabelId"
-          class="text-sm font-bold"
-        >
-          Notifications sur {{ thisDevice }}
-        </p>
-        <p
-          :id="switchHintId"
-          class="mt-0.5 text-xs leading-snug font-medium text-ink-muted"
-        >
-          {{ hint }}
-        </p>
-      </div>
-      <AppSwitch
-        :checked="state === 'on'"
-        :disabled="switching || (state !== 'on' && state !== 'off')"
-        :labelledby="switchLabelId"
-        :describedby="switchHintId"
-        @toggle="toggle"
-      />
-    </div>
+    <AppSwitch
+      class="mt-3"
+      :model-value="state === 'on'"
+      :label="`Notifications sur ${thisDevice}`"
+      :hint="hint"
+      :disabled="switching || (state !== 'on' && state !== 'off')"
+      @update:model-value="toggle"
+    />
     <p
       v-if="switchFailed"
       role="alert"

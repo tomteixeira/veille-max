@@ -1,13 +1,16 @@
-<!-- The leg view (spec, "Leg detail"): every candidate of a leg as a ticket, in ranking order. -->
+<!-- The leg view (spec, "Leg detail"): the leg's booking, and every candidate of the leg as a ticket, in ranking order. -->
 <script setup lang="ts">
-import { ChevronLeft, Clock, ExternalLink } from '@lucide/vue'
+import { ChevronLeft, Clock, ExternalLink, TicketPlus } from '@lucide/vue'
+import { sameTrain, type BookedTrain, type Candidate } from '#shared/domain/evaluation'
 import { liveCheckLink } from '#shared/domain/sncf-connect'
+import { isLegKind } from '#shared/domain/trip-template'
+import { cancelBooking, saveBooking } from '#shared/utils/booking-store'
 
 const route = useRoute()
 const key = computed(() => String(route.params.key))
 const kind = computed(() => String(route.params.kind))
 
-const [lastSnapshot, { data: view, error }] = await Promise.all([
+const [lastSnapshot, { data: view, error, refresh }] = await Promise.all([
   useLastSnapshotTime(),
   useFetch(() => `/api/trips/${key.value}/legs/${kind.value}`),
 ])
@@ -31,6 +34,68 @@ const filters = computed(() => [
 ])
 const shownCandidates = computed(() => (leg.value?.candidates ?? [])
   .filter(candidate => routeFilter.value === null || candidate.routeRank === routeFilter.value))
+
+// Bookings are written straight to Supabase under RLS (spec, "Settings writes"), then the leg is ranked again.
+const supabase = useSupabaseClient()
+const travellerId = useSupabaseUser().value?.sub
+const interactive = useInteractive()
+const saving = ref(false)
+const bookingFailed = ref(false)
+
+const booking = computed(() => leg.value?.booking ?? null)
+
+/** Whether a candidate ranks strictly above the booking: the first `candidatesAbove` of the ranking. */
+function betterThanBooking(candidate: Candidate): boolean {
+  return booking.value !== null && leg.value!.candidates.indexOf(candidate) < booking.value.candidatesAbove
+}
+
+async function changeBooking(change: () => Promise<void>): Promise<void> {
+  saving.value = true
+  bookingFailed.value = false
+  try {
+    await change()
+    await refresh()
+  }
+  finally {
+    saving.value = false
+  }
+}
+
+/** The leg kind of the URL, `null` when it names no leg (the view then shows « not tracked »). */
+const legKind = computed(() => isLegKind(kind.value) ? kind.value : null)
+
+/** Declares `train` as the leg's booking, replacing the one held, if any. */
+async function book(train: BookedTrain): Promise<void> {
+  const legKindValue = legKind.value
+  if (!travellerId) throw new Error('No signed-in traveller')
+  if (!legKindValue) throw new Error('No leg to book')
+  const { date, trainNumber, originCode, destinationCode, departureTime, arrivalTime } = train
+  await changeBooking(() => saveBooking(supabase, travellerId, {
+    tripKey: key.value,
+    legKind: legKindValue,
+    train: { date, trainNumber, originCode, destinationCode, departureTime, arrivalTime },
+  }))
+}
+
+async function bookCandidate(candidate: Candidate): Promise<void> {
+  await book(candidate.train).catch(() => {
+    bookingFailed.value = true
+  })
+}
+
+async function cancel(): Promise<void> {
+  const legKindValue = legKind.value
+  await changeBooking(async () => {
+    if (!travellerId) throw new Error('No signed-in traveller')
+    if (!legKindValue) throw new Error('No leg to cancel')
+    await cancelBooking(supabase, travellerId, key.value, legKindValue)
+  }).catch(() => {
+    bookingFailed.value = true
+  })
+}
+
+const pickerOpen = ref(false)
+const pickerTitleId = useId()
 </script>
 
 <template>
@@ -113,12 +178,64 @@ const shownCandidates = computed(() => (leg.value?.candidates ?? [])
       </template>
     </header>
 
-    <section
+    <div
       v-if="leg"
       class="mt-4 space-y-3 px-6"
+    >
+      <p
+        v-if="bookingFailed"
+        role="alert"
+        class="text-[13px] font-bold text-accent-ink"
+      >
+        Impossible d’enregistrer la réservation. Réessayez.
+      </p>
+      <BookingTicket
+        v-if="booking"
+        :booking="booking"
+        :route-weight="view!.routeWeight"
+        :station-name="stationName"
+        :past="leg.status === 'past'"
+        :disabled="!interactive || saving"
+        @cancel="cancel"
+      />
+      <button
+        v-if="leg.status !== 'past'"
+        type="button"
+        class="flex h-12 w-full items-center justify-center gap-2 rounded-control bg-surface text-[13px] font-bold transition-opacity hover:opacity-80 disabled:opacity-50"
+        :disabled="!interactive || saving"
+        @click="pickerOpen = true"
+      >
+        <TicketPlus
+          :size="16"
+          :stroke-width="2.2"
+          aria-hidden="true"
+        />
+        {{ booking ? 'Déclarer une autre réservation' : 'Déclarer une réservation' }}
+      </button>
+    </div>
+
+    <BottomSheet
+      :open="pickerOpen"
+      :labelledby="pickerTitleId"
+      @close="pickerOpen = false"
+    >
+      <BookingPicker
+        v-if="pickerOpen && leg"
+        :trip-key="key"
+        :kind="leg.kind"
+        :booked="booking?.train ?? null"
+        :station-name="stationName"
+        :title-id="pickerTitleId"
+        :pick="book"
+        @close="pickerOpen = false"
+      />
+    </BottomSheet>
+
+    <section
+      v-if="leg"
+      class="mt-3 space-y-3 px-6"
       aria-label="Trains"
     >
-      <!-- The best candidate is the first of the ranking: `leg.best` is a copy of it once fetched. -->
       <!-- The best candidate is the first of the ranking: `leg.best` is a copy of it once fetched. -->
       <CandidateTicket
         v-for="candidate in shownCandidates"
@@ -127,6 +244,10 @@ const shownCandidates = computed(() => (leg.value?.candidates ?? [])
         :best="candidate === leg.candidates[0]"
         :route-weight="view!.routeWeight"
         :station-name="stationName"
+        :booked="booking !== null && sameTrain(booking.train, candidate.train)"
+        :better-than-booking="betterThanBooking(candidate)"
+        :disabled="!interactive || saving"
+        @book="bookCandidate(candidate)"
       />
       <SurfaceCard
         v-if="leg.candidates.length === 0 && leg.status !== 'past'"
