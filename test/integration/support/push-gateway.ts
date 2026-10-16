@@ -1,4 +1,5 @@
-import type { PushDelivery, PushGateway, PushMessage, PushTarget } from '../../../server/push/push-gateway'
+import type { PushMessage } from '#shared/types/push'
+import type { PushDelivery, PushGateway, PushTarget } from '../../../server/push/push-gateway'
 
 /** One push the recording gateway was asked to send. */
 export interface SentPush {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deviceLabel, onThisDevice } from '../../app/utils/device-label'
+import { deviceLabel, onThisDevice, type DeviceLabel } from '../../app/utils/device-label'
 
 const userAgents = {
   iPhone: 'Mozilla/5.0 (iPhone; CPU iPhone OS 26_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1',
@@ -29,7 +29,7 @@ describe('the label of a device', () => {
 })
 
 describe('naming the device in use', () => {
-  it.each([
+  it.each<[DeviceLabel, string]>([
     ['iPhone', 'cet iPhone'],
     ['iPad', 'cet iPad'],
     ['Mac', 'ce Mac'],

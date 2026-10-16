@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '#shared/types/database.types'
-import { notifyTraveller, type NotificationResult } from './notify-traveller'
+import type { NotificationResult } from '#shared/types/push'
+import { notifyTraveller } from './notify-traveller'
 import type { PushGateway } from './push-gateway'
 
 export interface TestNotificationDependencies {

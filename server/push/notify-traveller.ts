@@ -1,9 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '#shared/types/database.types'
-import type { NotificationResult } from '#shared/types/push'
-import type { PushGateway, PushMessage } from './push-gateway'
-
-export type { NotificationResult }
+import type { NotificationResult, PushMessage } from '#shared/types/push'
+import type { PushGateway } from './push-gateway'
 
 /**
  * Sends `message` to every device of `travellerId`, and deletes the devices

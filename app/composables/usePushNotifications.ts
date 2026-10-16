@@ -19,9 +19,8 @@ function applicationServerKey(base64url: string): Uint8Array<ArrayBuffer> {
 }
 
 /** An iPhone or iPad running the app in Safari rather than from the home screen. */
-function inSafariOnIos(): boolean {
-  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
-  return ios && !window.matchMedia('(display-mode: standalone)').matches
+function inSafariOnIos(label: DeviceLabel): boolean {
+  return (label === 'iPhone' || label === 'iPad') && !window.matchMedia('(display-mode: standalone)').matches
 }
 
 /**
@@ -52,7 +51,7 @@ export async function usePushNotifications() {
   onMounted(async () => {
     label.value = deviceLabel(navigator)
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
-      support.value = inSafariOnIos() ? 'install' : 'unsupported'
+      support.value = inSafariOnIos(label.value) ? 'install' : 'unsupported'
       return
     }
     permission.value = Notification.permission

@@ -1,7 +1,5 @@
 import type { PushMessage } from '#shared/types/push'
 
-export type { PushMessage }
-
 /** Where a push goes: a device's Web Push subscription. */
 export interface PushTarget {
   endpoint: string

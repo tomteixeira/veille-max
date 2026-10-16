@@ -56,6 +56,19 @@ describe('test notification', () => {
     expect((await loadPushDevices(traveller.client, traveller.id)).map(device => device.endpoint)).toEqual([iPhone])
   })
 
+  it('deletes a gone subscription with the traveller’s own client too, as Réglages sends the test', async () => {
+    const iPhone = await turnOnDevice(traveller, 'iPhone')
+    const oldMac = await turnOnDevice(traveller, 'Mac')
+    await turnOnDevice(other, 'iPhone')
+    const gateway = recordingPushGateway({ gone: [oldMac] })
+
+    const result = await sendTestNotification({ db: traveller.client, gateway, travellerId: traveller.id })
+
+    expect(gateway.sent.map(push => push.endpoint).sort()).toEqual([iPhone, oldMac].sort())
+    expect(result).toEqual({ delivered: 1, gone: 1, failed: 0 })
+    expect((await loadPushDevices(traveller.client, traveller.id)).map(device => device.endpoint)).toEqual([iPhone])
+  })
+
   it('still reaches the other devices when one cannot be reached, and keeps it', async () => {
     const iPhone = await turnOnDevice(traveller, 'iPhone')
     const mac = await turnOnDevice(traveller, 'Mac')

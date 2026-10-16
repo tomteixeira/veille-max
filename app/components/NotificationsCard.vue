@@ -69,7 +69,7 @@ const testOutcome = computed(() => {
   return delivered.value === 1 ? 'Notification envoyée à 1 appareil.' : `Notification envoyée à ${delivered.value} appareils.`
 })
 
-const DEVICE_ICONS: Record<string, typeof Smartphone> = {
+const DEVICE_ICONS: Record<DeviceLabel, typeof Smartphone> = {
   'iPhone': Smartphone,
   'Android': Smartphone,
   'iPad': Tablet,
@@ -77,6 +77,7 @@ const DEVICE_ICONS: Record<string, typeof Smartphone> = {
   'Chromebook': Laptop,
   'PC Windows': Monitor,
   'Linux': Monitor,
+  'Appareil': Smartphone,
 }
 
 const dateFormat = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Paris' })
@@ -139,7 +140,7 @@ const dateFormat = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'sh
         class="flex items-center gap-3 py-1.5 text-[13px] font-semibold"
       >
         <component
-          :is="DEVICE_ICONS[device.deviceLabel] ?? Smartphone"
+          :is="DEVICE_ICONS[device.deviceLabel as DeviceLabel] ?? Smartphone"
           :size="18"
           class="shrink-0 text-ink-faint"
           aria-hidden="true"

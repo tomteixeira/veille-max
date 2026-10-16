@@ -25,6 +25,6 @@ const ON_THIS_DEVICE: Record<DeviceLabel, string> = {
 }
 
 /** « cet iPhone », « ce Mac »: the device in use, named inside a sentence. */
-export function onThisDevice(label: string): string {
-  return ON_THIS_DEVICE[label as DeviceLabel] ?? 'cet appareil'
+export function onThisDevice(label: DeviceLabel): string {
+  return ON_THIS_DEVICE[label]
 }

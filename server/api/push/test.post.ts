@@ -1,6 +1,6 @@
 import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import type { Database } from '#shared/types/database.types'
-import type { NotificationResult } from '../../push/notify-traveller'
+import type { NotificationResult } from '#shared/types/push'
 import { sendTestNotification } from '../../push/test-notification'
 import { webPushGateway } from '../../push/web-push-gateway'
 

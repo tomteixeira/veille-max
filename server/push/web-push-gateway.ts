@@ -1,5 +1,6 @@
 import webpush from 'web-push'
-import type { PushDelivery, PushGateway, PushMessage, PushTarget } from './push-gateway'
+import type { PushMessage } from '#shared/types/push'
+import type { PushDelivery, PushGateway, PushTarget } from './push-gateway'
 
 /** The app server's VAPID identity: who sends the pushes, and the key pair that signs them. */
 export interface VapidKeys {
