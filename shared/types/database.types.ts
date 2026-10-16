@@ -23,7 +23,53 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            "stations": {
+            "openings": {
+                  Row: {
+                    "first_snapshot_id": number,"id": number,"is_open": boolean,"last_snapshot_id": number,"observation_id": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "first_snapshot_id": number,"id"?: never,"is_open"?: boolean,"last_snapshot_id": number,"observation_id": number
+                  }
+                  Update: {
+                    "first_snapshot_id"?: number,"id"?: never,"is_open"?: boolean,"last_snapshot_id"?: number,"observation_id"?: number
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "openings_first_snapshot_id_fkey"
+      columns: ["first_snapshot_id"]
+isOneToOne: false
+      referencedRelation: "snapshots"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "openings_last_snapshot_id_fkey"
+      columns: ["last_snapshot_id"]
+isOneToOne: false
+      referencedRelation: "snapshots"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "openings_observation_id_fkey"
+      columns: ["observation_id"]
+isOneToOne: false
+      referencedRelation: "train_observations"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"snapshots": {
+                  Row: {
+                    "id": number,"ingested_at": string,"open_count": number,"processed_at": string,"row_count": number
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: never,"ingested_at": string,"open_count": number,"processed_at": string,"row_count": number
+                  }
+                  Update: {
+                    "id"?: never,"ingested_at"?: string,"open_count"?: number,"processed_at"?: string,"row_count"?: number
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"stations": {
                   Row: {
                     "code": string,"name": string
                   }
@@ -83,6 +129,44 @@ isOneToOne: false
       referencedColumns: ["user_id","kind"]
     }
                   ]
+                },"train_observations": {
+                  Row: {
+                    "arrival_time": string,"departure_time": string,"destination_code": string,"first_snapshot_id": number,"id": number,"last_snapshot_id": number,"origin_code": string,"train_number": string,"travel_date": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "arrival_time": string,"departure_time": string,"destination_code": string,"first_snapshot_id": number,"id"?: never,"last_snapshot_id": number,"origin_code": string,"train_number": string,"travel_date": string
+                  }
+                  Update: {
+                    "arrival_time"?: string,"departure_time"?: string,"destination_code"?: string,"first_snapshot_id"?: number,"id"?: never,"last_snapshot_id"?: number,"origin_code"?: string,"train_number"?: string,"travel_date"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "train_observations_destination_code_fkey"
+      columns: ["destination_code"]
+isOneToOne: false
+      referencedRelation: "stations"
+      referencedColumns: ["code"]
+    },{
+      foreignKeyName: "train_observations_first_snapshot_id_fkey"
+      columns: ["first_snapshot_id"]
+isOneToOne: false
+      referencedRelation: "snapshots"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "train_observations_last_snapshot_id_fkey"
+      columns: ["last_snapshot_id"]
+isOneToOne: false
+      referencedRelation: "snapshots"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "train_observations_origin_code_fkey"
+      columns: ["origin_code"]
+isOneToOne: false
+      referencedRelation: "stations"
+      referencedColumns: ["code"]
+    }
+                  ]
                 }
           }
           Views: {
@@ -92,8 +176,16 @@ isOneToOne: false
             "health":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"record_snapshot":
+{ Args: { "ingested_at": string,"processed_at": string,"trains": Json }; Returns: Json
+                           },
 "save_template_leg":
 { Args: { "anchor": Database["public"]['Enums']["time_anchor"],"ideal_time": string,"kind": Database["public"]['Enums']["leg_kind"],"routes": Json,"weekday": number,"window_end"?: string,"window_start"?: string }; Returns: undefined
+                           },
+"tracked_routes":
+{ Args: Record<PropertyKey, never>; Returns: {
+              "destination_code": string,"origin_code": string
+            }[]
                            }
           }
           Enums: {

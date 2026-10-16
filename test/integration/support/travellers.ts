@@ -16,8 +16,8 @@ const url = setting('NUXT_PUBLIC_SUPABASE_URL')
 const publishableKey = setting('NUXT_PUBLIC_SUPABASE_KEY')
 const noSession = { auth: { persistSession: false, autoRefreshToken: false } }
 
-/** The server role, which bypasses RLS: only for arranging and cleaning up. */
-const admin = createClient<Database>(url, setting('NUXT_SUPABASE_SECRET_KEY'), noSession)
+/** The server role, which bypasses RLS: for arranging and cleaning up, and as the app's server uses it. */
+export const admin = createClient<Database>(url, setting('NUXT_SUPABASE_SECRET_KEY'), noSession)
 
 export interface Traveller {
   id: string

@@ -4,7 +4,7 @@ Veille MAX tracks MAX JEUNE seat availability on a traveller's preferred routes.
 
 > Veille MAX is not affiliated with SNCF Voyageurs or SNCF Connect. Availability comes from the SNCF open data (`tgvmax` dataset, ODbL licence).
 
-**Status:** walking skeleton, sign-in and the trip template. The app shell, email-code sign-in, the default configuration in Réglages (« Votre week-end type »), the local Supabase stack and the CI pipeline are in place; features land ticket by ticket (see [the v1 spec](.scratch/veille-max-v1/spec.md) and [its tickets](.scratch/veille-max-v1/issues/)).
+**Status:** walking skeleton, sign-in, the trip template and the daily snapshot ingestion. The app shell, email-code sign-in, the default configuration in Réglages (« Votre week-end type »), the morning ingestion of the SNCF snapshot, the local Supabase stack and the CI pipeline are in place; features land ticket by ticket (see [the v1 spec](.scratch/veille-max-v1/spec.md) and [its tickets](.scratch/veille-max-v1/issues/)).
 
 ## Stack
 
@@ -65,6 +65,7 @@ npm run test:e2e                 # needs the local stack and .env
 - Functions are private by default: a migration grants `execute` explicitly to the roles that may call a function (see the initial migration).
 - Every traveller-owned row carries a `user_id` protected by row-level security; availability data is global ([ADR 0002](docs/adr/0002-multi-user-schema-shared-availability.md)).
 - **Trip template:** `template_legs` (one row per traveller and leg) and `template_routes` (its ranked routes). A traveller who never saved a leg gets the default from [`shared/domain/trip-template.ts`](shared/domain/trip-template.ts): Friday outbound, Sunday return, no routes. The app saves a leg with its routes in one call to `save_template_leg`, which runs under the caller's RLS.
+- **Availability history** (global, read by every signed-in traveller, written by the server role only): `snapshots` (one row per ingested SNCF snapshot, keyed by its processed timestamp), `train_observations` (every train seen on a tracked route, with its first and last snapshot) and `openings` (runs of consecutive snapshots in which a train had an open seat). `record_snapshot` writes one snapshot in a single transaction; `tracked_routes` lists the routes to collect.
 
 ### Station reference
 
@@ -78,6 +79,24 @@ npx supabase migration up --local
 ```
 
 The script reads the dataset's current codes and trainline's latest `stations.csv`. It prints the codes that had to fall back to the dataset's name. Review the generated migration, then commit it: merging it to `main` applies it to the hosted project. The migration only upserts, so a station that left the dataset is kept for the routes that still use it.
+
+## Snapshot ingestion and the tick
+
+Every 15 minutes, a `pg_cron` job (migration [`tick_schedule`](supabase/migrations/20261016161001_tick_schedule.sql)) posts to `POST /api/cron/tick` through `pg_net`, with the shared secret in the `x-tick-secret` header ([ADR 0003](docs/adr/0003-pg-cron-tick-drives-nitro-jobs.md)). The job reads the endpoint's URL and the secret from Vault (`tick_url`, `tick_secret`); without them it calls nothing. The endpoint answers 401 to a call without the secret, and to every call while `NUXT_TICK_SECRET` is unset.
+
+On each call, the server reads the `data_processed` timestamp of the SNCF `tgvmax` dataset. When it differs from the last ingested snapshot, it exports the trains of the tracked routes (every traveller's template routes) from today to D+30 in Paris, through the filtered export endpoint. It merges duplicate rows (open if any copy says `OUI`), records the snapshot and its train observations, and opens, extends or closes the openings. The code is in [`server/snapshots`](server/snapshots) behind a `SnapshotSource` port, and in [`server/tick`](server/tick). The endpoint returns a summary:
+
+```json
+{ "ingested": true, "snapshotId": 12, "counts": { "trains": 630, "openTrains": 50, "openingsOpened": 4, "openingsKept": 46, "openingsClosed": 3 } }
+```
+
+When the snapshot was already ingested, it returns `"ingested": false` and `"counts": null`. Home shows « Dernier instantané : <jour, heure> » once a snapshot is in.
+
+To run a tick by hand against the local stack, set `NUXT_TICK_SECRET` in `.env`, start the app, then:
+
+```bash
+curl -X POST -H "x-tick-secret: $NUXT_TICK_SECRET" http://localhost:3000/api/cron/tick
+```
 
 `GET /api/health` returns `{ "status": "ok", "database": "ok" }` when the server reaches Postgres through Supabase, and a 503 otherwise.
 
@@ -96,11 +115,12 @@ The script reads the dataset's current codes and trainline's latest `stations.cs
 | `NUXT_PUBLIC_SUPABASE_URL` | App (`.env`, Vercel) | Supabase project URL. |
 | `NUXT_PUBLIC_SUPABASE_KEY` | App (`.env`, Vercel) | Supabase publishable key (`sb_publishable_…`), exposed to the browser. |
 | `NUXT_SUPABASE_SECRET_KEY` | App (`.env`, Vercel) | Supabase secret key (`sb_secret_…`), server only. |
+| `NUXT_TICK_SECRET` | App (`.env`, Vercel) | Shared secret of the tick endpoint, server only. Same value as the `tick_secret` Vault secret. |
 | `SUPABASE_ACCESS_TOKEN` | GitHub Actions secret | Personal access token used by the Supabase CLI to apply migrations. |
 | `SUPABASE_DB_PASSWORD` | GitHub Actions secret | Password of the hosted Postgres database. |
 | `SUPABASE_PROJECT_ID` | GitHub Actions variable | Reference of the hosted Supabase project. The migrations job is skipped while it is unset. |
 
-[`.env.example`](.env.example) lists the app variables. Later tickets will add the push notification keys and the tick endpoint secret.
+[`.env.example`](.env.example) lists the app variables. Later tickets will add the push notification keys.
 
 ## CI/CD
 
@@ -119,14 +139,22 @@ One-time setup:
 2. **GitHub:** add the `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` secrets and the `SUPABASE_PROJECT_ID` variable. The next push to `main` applies the migrations; you can also run the "Database migrations" workflow by hand.
 3. **Vercel:** import the GitHub repository. Vercel detects Nuxt and builds with the `vercel` Nitro preset on its own, on Node.js 24 (from `engines` in `package.json`). Add the three app variables to the Production and Preview environments.
 4. Check `https://<your-domain>/api/health`.
+5. **Tick:** generate a secret (`openssl rand -hex 32`). Add it to Vercel as `NUXT_TICK_SECRET` (Production) and redeploy. Then, in the Supabase SQL editor:
+
+   ```sql
+   select vault.create_secret('https://<your-domain>/api/cron/tick', 'tick_url');
+   select vault.create_secret('<the same secret>', 'tick_secret');
+   ```
+
+   Check `select * from cron.job` (the `tick` job is active) and, after the next quarter hour, `select status_code, content from net._http_response order by id desc limit 1` (a 200 with the tick summary).
 
 ## Project layout
 
 ```text
 app/                 Nuxt app: pages, layouts, components, styles
-server/              Nitro server routes
+server/              Nitro server: routes, snapshot ingestion, the tick
 shared/domain/       Domain rules, pure TypeScript (the trip template; the domain core will join it)
-shared/utils/        Code shared by the app and the server (Paris time, trip template storage)
+shared/utils/        Code shared by the app and the server (Paris time, trip template and snapshot storage)
 scripts/             Developer scripts (local .env, station reference refresh)
 supabase/            Supabase CLI config, migrations, seed and email templates
 test/unit/           Vitest unit tests
