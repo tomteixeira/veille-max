@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import { defaultTripTemplate, type Route } from '#shared/domain/trip-template'
 import { saveTemplateLeg } from '#shared/utils/trip-template-store'
 import { loadLastSnapshot } from '#shared/utils/snapshot-store'
+import { saveCustomisedTrip } from '#shared/utils/trip-store'
 import type { SnapshotTrain } from '../../server/snapshots/snapshot-source'
 import { runTick } from '../../server/tick/run-tick'
 import { clearSnapshots, fixtureSnapshotSource, observations, openings } from './support/snapshots'
@@ -157,5 +158,58 @@ describe('snapshot ingestion through the tick', () => {
     const write = await travellers[0]!.client.from('snapshots')
       .insert({ processed_at: sunday.processedAt.toISOString(), ingested_at: sunday.tick.toISOString(), row_count: 0, open_count: 0 })
     expect(write.error).toMatchObject({ code: INSUFFICIENT_PRIVILEGE })
+  })
+})
+
+describe('snapshot ingestion of customised trips', () => {
+  const parisLyonToMarseille: Route = { originCode: 'FRPLY', destinationCode: 'FRMSC' }
+  const marseilleToParisLyon: Route = { originCode: 'FRMSC', destinationCode: 'FRPLY' }
+  const bordeauxToMontpellier: Route = { originCode: 'FRBOJ', destinationCode: 'FRMPL' }
+  const { outbound, return: ret } = defaultTripTemplate()
+  let traveller: Traveller
+
+  beforeAll(async () => {
+    traveller = await signedInTraveller()
+    await saveTemplateLeg(traveller.client, 'outbound', { ...outbound, routes: [parisLyonToPartDieu] })
+    // Inside the horizon of Friday 16 October: week 43, to Marseille, leaving on Thursday.
+    await saveCustomisedTrip(traveller.client, '2026-W43', {
+      outbound: { ...outbound, date: '2026-10-22', routes: [parisLyonToMarseille] },
+      return: { ...ret, date: '2026-10-25', routes: [marseilleToParisLyon] },
+    })
+    // Beyond it: week 50, from Bordeaux to Montpellier.
+    await saveCustomisedTrip(traveller.client, '2026-W50', {
+      outbound: { ...outbound, date: '2026-12-11', routes: [bordeauxToMontpellier] },
+      return: { ...ret, date: '2026-12-13', routes: [] },
+    })
+  })
+
+  afterAll(async () => {
+    await clearSnapshots()
+    await removeTraveller(traveller)
+  })
+
+  beforeEach(clearSnapshots)
+
+  it('collects the routes of the customised trips in the horizon, as well as the template routes', async () => {
+    const fixture = fixtureSnapshotSource({ processedAt: friday.processedAt, trains: [] })
+
+    await runTick({ db: admin, source: fixture.source, now: friday.tick })
+
+    const [{ routes }] = fixture.exports as [typeof fixture.exports[number]]
+    expect(routes).toEqual(expect.arrayContaining([parisLyonToPartDieu, parisLyonToMarseille, marseilleToParisLyon]))
+    expect(routes).not.toContainEqual(bordeauxToMontpellier)
+  })
+
+  it('records the trains of a customised route', async () => {
+    const fixture = fixtureSnapshotSource({
+      processedAt: friday.processedAt,
+      trains: [train('6177', parisLyonToMarseille, '2026-10-22', '19:07', '22:24', true)],
+    })
+
+    const summary = await runTick({ db: admin, source: fixture.source, now: friday.tick })
+
+    expect(summary.counts).toMatchObject({ trains: 1, openTrains: 1, openingsOpened: 1 })
+    const { data } = await admin.from('train_observations').select('train_number, travel_date').eq('origin_code', 'FRPLY').eq('destination_code', 'FRMSC')
+    expect(data).toEqual([{ train_number: '6177', travel_date: '2026-10-22' }])
   })
 })

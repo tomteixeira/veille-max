@@ -61,10 +61,10 @@ async function changeBooking(change: () => Promise<void>): Promise<void> {
   }
 }
 
-/** Declares `train` as the leg's booking, replacing the one held, if any. */
 /** The leg kind of the URL, `null` when it names no leg (the view then shows « not tracked »). */
 const legKind = computed(() => isLegKind(kind.value) ? kind.value : null)
 
+/** Declares `train` as the leg's booking, replacing the one held, if any. */
 async function book(train: BookedTrain): Promise<void> {
   const legKindValue = legKind.value
   if (!travellerId) throw new Error('No signed-in traveller')

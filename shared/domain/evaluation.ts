@@ -5,13 +5,30 @@
  * generates the trips of the tracking horizon and ranks each leg's candidates.
  */
 import { addDays, parisDate, type ParisDate } from '../utils/paris-time'
-import type { LegKind, LocalTime, Route, TemplateLeg, TripTemplate, Weekday } from './trip-template'
+import type { LegKind, LegSettings, LocalTime, Route, TripTemplate, Weekday } from './trip-template'
 
 /** How many days after today trips are tracked: the MAX JEUNE booking window (CONTEXT.md, Tracking Horizon). */
 export const TRACKING_HORIZON_DAYS = 30
 
 /** How many minutes outside the time window one step of route rank is worth, unless the traveller sets it (CONTEXT.md, Route Weight). */
 export const DEFAULT_ROUTE_WEIGHT = 30
+
+/** How many trips beyond the tracking horizon are shown in advance (CONTEXT.md, Upcoming Trip). */
+export const UPCOMING_TRIP_COUNT = 2
+
+/** A leg of a customised trip: its own settings, on its own date. */
+export interface CustomisedLeg extends LegSettings {
+  date: ParisDate
+}
+
+/** The leg settings of a customised trip, detached from the trip template (CONTEXT.md, Customised Trip). */
+export type TripCustomisation = Record<LegKind, CustomisedLeg>
+
+/** A muted trip, or only one of its legs when `leg` is set (CONTEXT.md, Muted). */
+export interface TripMute {
+  tripKey: string
+  leg?: LegKind
+}
 
 /** The largest route weight a traveller can set. */
 export const MAX_ROUTE_WEIGHT = 120
@@ -23,6 +40,9 @@ export interface TravellerSettings {
   template: TripTemplate
   /** Minutes per route rank when ranking out-of-window candidates; `DEFAULT_ROUTE_WEIGHT` when not set. */
   routeWeight?: number
+  /** The customised trips, by trip key. */
+  customisations?: Readonly<Record<string, TripCustomisation>>
+  mutes?: readonly TripMute[]
   /** At most one per trip and leg. */
   bookings?: readonly Booking[]
 }
@@ -90,8 +110,10 @@ export type LegStatus = 'booked' | 'available' | 'outside-window' | 'none' | 'pa
 export interface Leg {
   kind: LegKind
   date: ParisDate
-  /** The settings the leg is evaluated with: its time window, ideal time and ranked routes. */
-  settings: TemplateLeg
+  /** The settings the leg is evaluated with: the trip template's, or the customised trip's. */
+  settings: LegSettings
+  /** Whether the leg or its whole trip is muted: still evaluated, but never notified. */
+  muted: boolean
   status: LegStatus
   /** In ranking order. */
   candidates: Candidate[]
@@ -101,14 +123,26 @@ export interface Leg {
 }
 
 export interface Trip {
-  /** The ISO year-week of the trip's default outbound date, « 2026-W43 ». */
+  /** The ISO year-week of the trip's default outbound date, « 2026-W43 ». It does not change when its dates are customised. */
   key: string
+  /** Whether the trip's leg settings are its own, rather than the trip template's. */
+  customised: boolean
+  /** Whether the whole trip is muted. */
+  muted: boolean
   legs: Record<LegKind, Leg>
 }
 
+/** A trip just beyond the tracking horizon, shown in advance. */
+export interface UpcomingTrip extends Trip {
+  /** The day the trip enters the tracking horizon, when its seats can start coming out. */
+  opensOn: ParisDate
+}
+
 export interface Evaluation {
-  /** The tracked trips, soonest first. */
+  /** The tracked trips, soonest first. Trips whose legs have all passed are archived: left out. */
   trips: Trip[]
+  /** The next trips beyond the tracking horizon, soonest first. */
+  upcoming: UpcomingTrip[]
   /** How many bookings are held for legs that have not passed, against `MAX_ACTIVE_BOOKINGS`. */
   activeBookings: number
 }
@@ -116,59 +150,114 @@ export interface Evaluation {
 export function evaluate({ now, settings, observations }: EvaluationInput): Evaluation {
   const today = parisDate(now)
   const horizonEnd = addDays(today, TRACKING_HORIZON_DAYS)
-  const { outbound, return: returnLeg } = settings.template
-  const returnOffset = (returnLeg.weekday - outbound.weekday + 7) % 7
+  const { template, customisations = {}, mutes = [] } = settings
+  const returnOffset = (template.return.weekday - template.outbound.weekday + 7) % 7
   const routeWeight = settings.routeWeight ?? DEFAULT_ROUTE_WEIGHT
+  const isMuted = (tripKey: string, leg?: LegKind) => mutes.some(mute => mute.tripKey === tripKey && mute.leg === leg)
   const bookings = settings.bookings ?? []
   const bookingOf = (tripKey: string, kind: LegKind) =>
     bookings.find(booking => booking.tripKey === tripKey && booking.legKind === kind)?.train ?? null
 
   const trips: Trip[] = []
-  // The template's outbound weekday in the week before today's, then every week after it.
-  let outboundDate = addDays(today, outbound.weekday - weekday(today) - 7)
-  for (; outboundDate <= horizonEnd; outboundDate = addDays(outboundDate, 7)) {
-    const returnDate = addDays(outboundDate, returnOffset)
-    if (returnDate < today) continue
+  const upcoming: UpcomingTrip[] = []
+  // The template's outbound weekday two weeks before today's, so that a trip
+  // whose return leg was moved later is still found, then every week after it.
+  let outboundDate = addDays(today, template.outbound.weekday - weekday(today) - 14)
+  for (; upcoming.length < UPCOMING_TRIP_COUNT; outboundDate = addDays(outboundDate, 7)) {
     const key = isoWeek(outboundDate)
-    trips.push({
-      key,
-      legs: {
-        outbound: evaluateLeg('outbound', outboundDate, today, outbound, routeWeight, observations, bookingOf(key, 'outbound')),
-        return: evaluateLeg('return', returnDate, today, returnLeg, routeWeight, observations, bookingOf(key, 'return')),
-      },
-    })
+    const customisation = customisations[key]
+    const legs = customisation ?? {
+      outbound: { ...legSettings(template.outbound), date: outboundDate },
+      return: { ...legSettings(template.return), date: addDays(outboundDate, returnOffset) },
+    }
+    const [firstDate, lastDate] = [legs.outbound.date, legs.return.date].sort() as [ParisDate, ParisDate]
+    // Archived once every leg has passed.
+    if (lastDate < today) continue
+
+    const muted = isMuted(key)
+    const evaluated = (kind: LegKind) => evaluateLeg(kind, legs[kind], muted || isMuted(key, kind), today, routeWeight, observations, bookingOf(key, kind))
+    const trip: Trip = { key, customised: customisation !== undefined, muted, legs: { outbound: evaluated('outbound'), return: evaluated('return') } }
+
+    // Tracked as soon as its first leg enters the horizon.
+    if (firstDate <= horizonEnd) trips.push(trip)
+    else upcoming.push({ ...trip, opensOn: addDays(firstDate, -TRACKING_HORIZON_DAYS) })
   }
+  // Customised dates can put a trip before the one of the previous week.
+  const soonestFirst = (a: Trip, b: Trip) => firstLegDate(a).localeCompare(firstLegDate(b))
   const activeBookings = bookings.filter(booking => booking.train.date >= today).length
-  return { trips, activeBookings }
+  return { trips: trips.sort(soonestFirst), upcoming: upcoming.sort(soonestFirst), activeBookings }
+}
+
+function firstLegDate({ legs }: Trip): ParisDate {
+  return legs.outbound.date < legs.return.date ? legs.outbound.date : legs.return.date
+}
+
+/**
+ * The customisation of `trip` once the traveller applies `change` to its
+ * `kind` leg: everything else keeps its current settings, so the first change
+ * copies the trip template's settings of both legs into the trip.
+ */
+export function customiseTrip(trip: Trip, kind: LegKind, change: Partial<CustomisedLeg>): TripCustomisation {
+  const current = ({ settings, date }: Leg): CustomisedLeg => ({ ...settings, date })
+  const customisation = { outbound: current(trip.legs.outbound), return: current(trip.legs.return) }
+  return { ...customisation, [kind]: { ...customisation[kind], ...change } }
+}
+
+/** How many days before its week's Monday, and after its Sunday, a trip's legs can move. */
+const LEG_DATE_MARGIN_DAYS = 3
+
+/**
+ * The dates the `kind` leg of `trip` can move to: for the outbound leg, the
+ * week up to the return leg's date; for the return leg, the week from the
+ * outbound leg's date. Either way, the trip never comes back before it leaves,
+ * its legs stay within three days of its week, so it never drifts into another
+ * trip's, and no leg moves to a day that has passed at `now`.
+ */
+export function legDateChoices(trip: Trip, kind: LegKind, now: Date): ParisDate[] {
+  const today = parisDate(now)
+  const monday = isoWeekMonday(trip.key)
+  const [first, last] = [addDays(monday, -LEG_DATE_MARGIN_DAYS), addDays(monday, 6 + LEG_DATE_MARGIN_DAYS)]
+  const week = [0, 1, 2, 3, 4, 5, 6]
+  const choices = kind === 'outbound'
+    ? week.map(day => addDays(trip.legs.return.date, day - 6))
+    : week.map(day => addDays(trip.legs.outbound.date, day))
+  return choices.filter(date => date >= first && date <= last && (date >= today || date === trip.legs[kind].date))
+}
+
+/** Only the settings of a leg, without its weekday or date. */
+function legSettings({ anchor, window, idealTime, routes }: LegSettings): LegSettings {
+  return { anchor, window, idealTime, routes }
 }
 
 function evaluateLeg(
   kind: LegKind,
-  date: ParisDate,
+  leg: CustomisedLeg,
+  muted: boolean,
   today: ParisDate,
-  templateLeg: TemplateLeg,
   routeWeight: number,
   observations: readonly TrainObservation[],
   bookedTrain: BookedTrain | null,
 ): Leg {
+  const { date } = leg
+  const settings = legSettings(leg)
   if (date < today) {
-    const booking = bookedTrain && rankedBooking(bookedTrain, date, templateLeg, [], routeWeight)
-    return { kind, date, settings: templateLeg, status: 'past', candidates: [], best: null, booking }
+    const booking = bookedTrain && rankedBooking(bookedTrain, date, settings, [], routeWeight)
+    return { kind, date, settings, muted, status: 'past', candidates: [], best: null, booking }
   }
 
   const candidates: Candidate[] = []
   for (const train of observations) {
     if (!train.open || train.date !== date) continue
-    const routeRank = routeRankOf(train, templateLeg)
-    if (routeRank !== null) candidates.push({ train, routeRank, ...timeRanking(train, templateLeg) })
+    const routeRank = routeRankOf(train, settings)
+    if (routeRank !== null) candidates.push({ train, routeRank, ...timeRanking(train, settings) })
   }
   candidates.sort((a, b) => compareCandidates(a, b, routeWeight))
   const best = candidates[0] ?? null
-  const booking = bookedTrain && rankedBooking(bookedTrain, date, templateLeg, candidates, routeWeight)
+  const booking = bookedTrain && rankedBooking(bookedTrain, date, settings, candidates, routeWeight)
 
   let status: LegStatus = best === null ? 'none' : best.inWindow ? 'available' : 'outside-window'
   if (booking) status = 'booked'
-  return { kind, date, settings: templateLeg, status, candidates, best, booking }
+  return { kind, date, settings, muted, status, candidates, best, booking }
 }
 
 /** Whether two routes join the same origin and destination stations. */
@@ -182,7 +271,7 @@ export function sameTrain(a: BookedTrain, b: BookedTrain): boolean {
 }
 
 /** The rank of a train's route among a leg's routes, `null` when it is not one of them. */
-export function routeRankOf(train: Route, { routes }: Pick<TemplateLeg, 'routes'>): number | null {
+export function routeRankOf(train: Route, { routes }: Pick<LegSettings, 'routes'>): number | null {
   const index = routes.findIndex(route => sameRoute(route, train))
   return index < 0 ? null : index + 1
 }
@@ -193,9 +282,9 @@ export function routeRankOf(train: Route, { routes }: Pick<TemplateLeg, 'routes'
  * booking that could no longer be a candidate of the leg, its route no longer
  * among the leg's routes or its train on another day, ranks below every candidate.
  */
-function rankedBooking(train: BookedTrain, date: ParisDate, templateLeg: TemplateLeg, candidates: readonly Candidate[], routeWeight: number): RankedBooking {
-  const routeRank = routeRankOf(train, templateLeg)
-  const ranking = timeRanking(train, templateLeg)
+function rankedBooking(train: BookedTrain, date: ParisDate, settings: LegSettings, candidates: readonly Candidate[], routeWeight: number): RankedBooking {
+  const routeRank = routeRankOf(train, settings)
+  const ranking = timeRanking(train, settings)
   const candidatesAbove = routeRank === null || train.date !== date
     ? candidates.length
     : candidates.filter(candidate => compareCandidates(candidate, { routeRank, ...ranking, train }, routeWeight) < 0).length
@@ -205,7 +294,7 @@ function rankedBooking(train: BookedTrain, date: ParisDate, templateLeg: Templat
 /** What the ranking reads of a train's times: against the leg's window and ideal time. */
 type TimeRanking = Pick<Candidate, 'inWindow' | 'minutesOutsideWindow' | 'minutesFromIdeal' | 'durationMinutes'>
 
-function timeRanking(train: BookedTrain, { anchor, window, idealTime }: TemplateLeg): TimeRanking {
+function timeRanking(train: BookedTrain, { anchor, window, idealTime }: LegSettings): TimeRanking {
   const departure = minutes(train.departureTime)
   let arrival = minutes(train.arrivalTime)
   // An arrival earlier than the departure is on the next day.
@@ -284,4 +373,12 @@ function isoWeek(date: ParisDate): string {
   const year = thursday.getUTCFullYear()
   const week = Math.floor((thursday.getTime() - Date.UTC(year, 0, 1)) / (7 * 24 * 3600 * 1000)) + 1
   return `${year}-W${String(week).padStart(2, '0')}`
+}
+
+/** The Monday of « 2026-W43 »'s week. */
+function isoWeekMonday(key: string): ParisDate {
+  const [year, week] = key.split('-W').map(Number)
+  // 4 January is always in week 1.
+  const january4 = `${year}-01-04`
+  return addDays(january4, (week! - 1) * 7 - (weekday(january4) - 1))
 }

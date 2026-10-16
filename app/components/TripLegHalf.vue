@@ -36,8 +36,8 @@ const shown = computed(() => props.leg.booking ?? props.leg.best)
           {{ LEG_NAMES[leg.kind] }} · {{ shortDay(leg.date) }}
         </NuxtLink>
       </h3>
-      <AppChip :tone="leg.status === 'booked' ? 'booked' : 'muted'">
-        {{ LEG_STATUS_NAMES[leg.status] }}
+      <AppChip :tone="leg.status === 'booked' && !leg.muted ? 'booked' : 'muted'">
+        {{ legChip(leg) }}
       </AppChip>
     </div>
 

@@ -56,8 +56,9 @@ async function signOut() {
         :key="kind"
       >
         <TicketPerforation v-if="index > 0" />
-        <TemplateLegHalf
+        <LegHalf
           :kind="kind"
+          :day="WEEKDAY_NAMES[template[kind].weekday]"
           :leg="template[kind]"
           :station-name="stationName"
           :disabled="!interactive"
@@ -90,15 +91,18 @@ async function signOut() {
       :labelledby="editorTitleId"
       @close="editing = null"
     >
-      <TemplateLegEditor
+      <LegEditor
         v-if="editing && template"
         :key="editing"
         :kind="editing"
+        :title="`${LEG_NAMES[editing]} par défaut`"
+        :day="template[editing].weekday"
+        :days="WEEKDAY_CHOICES"
         :leg="template[editing]"
         :stations="stations"
         :station-name="stationName"
         :title-id="editorTitleId"
-        :save="leg => saveLeg(editing!, leg)"
+        :save="(weekday, leg) => saveLeg(editing!, { ...leg, weekday })"
         @close="editing = null"
       />
     </BottomSheet>

@@ -1,6 +1,7 @@
 import type { Candidate, Leg, LegStatus, RankedBooking, Trip } from '#shared/domain/evaluation'
-import type { TemplateLeg } from '#shared/domain/trip-template'
+import type { LegSettings } from '#shared/domain/trip-template'
 import type { ParisDate } from '#shared/utils/paris-time'
+import type { DayChoice } from './leg-words'
 
 /** The chip of a leg on its ticket half. */
 export const LEG_STATUS_NAMES: Record<LegStatus, string> = {
@@ -48,6 +49,26 @@ export function longDayName(date: ParisDate): string {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}`
 }
 
+const dayAndMonthDigits = new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', day: '2-digit', month: '2-digit' })
+
+/** « Ouverture le 21/10 »: when an upcoming trip enters the tracking horizon. */
+export function opensOnText(date: ParisDate): string {
+  return `Ouverture le ${dayAndMonthDigits.format(utcMidnight(date))}`
+}
+
+/** The dates a leg of a trip can move to, as the leg editor offers them: « Jeu » over « 22 ». */
+export function dateChoices(dates: readonly ParisDate[]): DayChoice<ParisDate>[] {
+  return dates.map((date) => {
+    const weekday = shortWeekday.format(utcMidnight(date)).replace('.', '')
+    return { value: date, label: longDayName(date), short: `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)}`, detail: day.format(utcMidnight(date)) }
+  })
+}
+
+/** The chip of a leg on its ticket half: « En sourdine » when it is muted, its status otherwise. */
+export function legChip({ muted, status }: Leg): string {
+  return muted ? 'En sourdine' : LEG_STATUS_NAMES[status]
+}
+
 /** « 3 trains disponibles »: the headline of a leg view. */
 export function legHeadline({ status, candidates }: Leg): string {
   if (status === 'past') return 'Ce jour est passé'
@@ -56,7 +77,7 @@ export function legHeadline({ status, candidates }: Leg): string {
 }
 
 /** The window banner of a leg view: « Arrivée avant 10:00 », « idéale 09:00 ». */
-export function windowBanner({ anchor, window, idealTime }: TemplateLeg): { window: string, ideal: string } {
+export function windowBanner({ anchor, window, idealTime }: LegSettings): { window: string, ideal: string } {
   const noun = anchor === 'departure' ? 'Départ' : 'Arrivée'
   let range = 'à toute heure'
   if (window.start && window.end) range = `entre ${window.start} et ${window.end}`

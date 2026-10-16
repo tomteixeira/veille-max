@@ -139,8 +139,8 @@ describe('evaluation', () => {
     it('come with each leg: its window, ideal time and ranked routes', () => {
       const leg = evaluate({ now: fridayMorning, settings: settings(), observations: [] }).trips[1]?.legs.outbound
 
+      // The leg's day is its date, which a customised trip can move off the template's weekday.
       expect(leg?.settings).toEqual({
-        weekday: 5,
         anchor: 'arrival',
         window: { start: null, end: '10:00' },
         idealTime: '09:00',
