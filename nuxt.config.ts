@@ -28,6 +28,16 @@ export default defineNuxtConfig({
 
   // Vercel builds pick the `vercel` Nitro preset on their own (zero config),
   // so local builds keep the default `node-server` output used by Playwright.
+  nitro: {
+    vercel: {
+      functions: {
+        // Paris, next to the Supabase database (eu-west-3). Vercel defaults to Washington (iad1).
+        regions: ['cdg1'],
+        // Nitro would cap the runtime at Node 22; match `engines` instead.
+        runtime: 'nodejs24.x',
+      },
+    },
+  },
 
   vite: {
     plugins: [tailwindcss()],
