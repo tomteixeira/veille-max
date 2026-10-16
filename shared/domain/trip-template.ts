@@ -6,6 +6,13 @@
 /** The Outbound leg (« Aller ») or the Return leg (« Retour »). */
 export type LegKind = 'outbound' | 'return'
 
+/** The legs in the order a trip runs them. */
+export const LEG_KINDS = ['outbound', 'return'] as const satisfies readonly LegKind[]
+
+export function isLegKind(value: string): value is LegKind {
+  return (LEG_KINDS as readonly string[]).includes(value)
+}
+
 /** ISO weekday: 1 is Monday, 7 is Sunday. */
 export type Weekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
 

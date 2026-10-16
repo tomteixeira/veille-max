@@ -1,3 +1,6 @@
+import { mkdir, rm, stat } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { expect } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
 import type { TemplateLeg } from '../../../shared/domain/trip-template'
@@ -74,4 +77,45 @@ export async function recordSnapshot(trains: readonly FixtureTrain[]): Promise<n
 export async function removeSnapshot(snapshotId: number): Promise<void> {
   const { error } = await admin().from('snapshots').delete().eq('id', snapshotId)
   expect(error).toBeNull()
+}
+
+// Every traveller reads the latest snapshot: tests that record one take turns,
+// across Playwright workers, through a lock directory.
+const LATEST_SNAPSHOT_LOCK = join(tmpdir(), 'veille-max-e2e-latest-snapshot.lock')
+// A lock older than this was left by a run that crashed.
+const STALE_LOCK_MS = 5 * 60_000
+
+async function lockLatestSnapshot(): Promise<void> {
+  for (;;) {
+    try {
+      await mkdir(LATEST_SNAPSHOT_LOCK)
+      return
+    }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      const lockedAt = await stat(LATEST_SNAPSHOT_LOCK).then(({ mtimeMs }) => mtimeMs, () => Date.now())
+      if (Date.now() - lockedAt > STALE_LOCK_MS) await rm(LATEST_SNAPSHOT_LOCK, { recursive: true, force: true })
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+  }
+}
+
+/**
+ * Runs `body` while a snapshot listing `trains` is the latest one, then
+ * deletes it. No other test records a snapshot meanwhile.
+ */
+export async function withLatestSnapshot(trains: readonly FixtureTrain[], body: () => Promise<void>): Promise<void> {
+  await lockLatestSnapshot()
+  try {
+    const snapshotId = await recordSnapshot(trains)
+    try {
+      await body()
+    }
+    finally {
+      await removeSnapshot(snapshotId)
+    }
+  }
+  finally {
+    await rm(LATEST_SNAPSHOT_LOCK, { recursive: true, force: true })
+  }
 }

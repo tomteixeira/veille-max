@@ -33,6 +33,7 @@ const title = computed(() => tripTitle(props.trip))
     >
       <TicketPerforation v-if="index > 0" />
       <TripLegHalf
+        :trip-key="trip.key"
         :leg="trip.legs[kind]"
         :station-name="stationName"
       />

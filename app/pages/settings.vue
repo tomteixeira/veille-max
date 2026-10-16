@@ -3,10 +3,10 @@ import type { LegKind } from '#shared/domain/trip-template'
 
 useHead({ title: 'Réglages' })
 
-// Default route weight (CONTEXT.md), until the traveller can change it.
-const DEFAULT_ROUTE_WEIGHT_MINUTES = 30
-
-const { template, stations, status, refresh, stationName, saveLeg } = await useTripTemplate()
+const [{ template, stations, status, refresh, stationName, saveLeg }, { routeWeight, save: saveRouteWeight }] = await Promise.all([
+  useTripTemplate(),
+  useRouteWeight(),
+])
 
 /** The leg whose editor is open in the bottom sheet. */
 const editing = ref<LegKind | null>(null)
@@ -107,19 +107,11 @@ async function signOut() {
       class="mt-7 space-y-4 px-6"
       aria-label="Autres réglages"
     >
-      <SurfaceCard>
-        <div class="flex items-baseline justify-between gap-4">
-          <h2 class="text-[15px] font-extrabold">
-            Pondération des gares
-          </h2>
-          <p class="tnum text-2xl font-extrabold">
-            {{ DEFAULT_ROUTE_WEIGHT_MINUTES }} min
-          </p>
-        </div>
-        <p class="mt-2 text-[13px] leading-snug font-medium text-ink-muted">
-          Quand aucun train n’entre dans la fenêtre optimale, un rang de gare vaut {{ DEFAULT_ROUTE_WEIGHT_MINUTES }} minutes d’écart.
-        </p>
-      </SurfaceCard>
+      <RouteWeightCard
+        :route-weight="routeWeight"
+        :save="saveRouteWeight"
+        :disabled="!interactive"
+      />
 
       <SurfaceCard
         v-for="card in upcomingCards"

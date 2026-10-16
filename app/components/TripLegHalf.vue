@@ -1,12 +1,13 @@
 <!--
   One half of a home ticket: a leg of a tracked trip, with its status and its
-  best candidate in the latest snapshot.
+  best candidate in the latest snapshot. Tapping anywhere on it opens its leg view.
 -->
 <script setup lang="ts">
 import { ArrowRight } from '@lucide/vue'
 import type { Leg } from '#shared/domain/evaluation'
 
 defineProps<{
+  tripKey: string
   leg: Leg
   stationName: (code: string) => string
 }>()
@@ -16,7 +17,7 @@ const headingId = useId()
 
 <template>
   <section
-    class="px-5 py-3"
+    class="relative px-5 py-3"
     :aria-labelledby="headingId"
   >
     <div class="flex items-center justify-between gap-2">
@@ -24,7 +25,13 @@ const headingId = useId()
         :id="headingId"
         class="eyebrow"
       >
-        {{ LEG_NAMES[leg.kind] }} · {{ shortDay(leg.date) }}
+        <!-- Stretched over the whole half, so that tapping anywhere on it opens the leg view. -->
+        <NuxtLink
+          :to="`/trips/${tripKey}/${leg.kind}`"
+          class="after:absolute after:inset-0 focus-visible:outline-none focus-visible:after:rounded-control focus-visible:after:outline-2 focus-visible:after:outline-accent"
+        >
+          {{ LEG_NAMES[leg.kind] }} · {{ shortDay(leg.date) }}
+        </NuxtLink>
       </h3>
       <AppChip>{{ LEG_STATUS_NAMES[leg.status] }}</AppChip>
     </div>
