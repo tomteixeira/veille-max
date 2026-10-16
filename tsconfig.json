@@ -16,6 +16,9 @@
     },
     {
       "path": "./test/tsconfig.json"
+    },
+    {
+      "path": "./service-worker/tsconfig.json"
     }
   ]
 }

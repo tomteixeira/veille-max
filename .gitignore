@@ -32,3 +32,6 @@ test/e2e/.auth/
 
 # Throwaway UI prototype: it lives on the `prototype/ui-variants` branch, not on main
 .scratch/*/prototype-ui/
+
+# Type-check build info of the service worker project
+service-worker/*.tsbuildinfo
