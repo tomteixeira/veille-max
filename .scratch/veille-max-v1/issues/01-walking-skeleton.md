@@ -4,19 +4,31 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
-- [ ] Nuxt 4, Vue 3, TypeScript in strict mode and Tailwind are set up; the UI copy is in French.
-- [ ] An app shell with navigation to Accueil, Dashboard and Réglages (placeholder pages), mobile-first.
-- [ ] Light and dark themes follow the system preference and implement the "Billets" visual direction chosen in the UI prototype (see the spec's UI module): Plus Jakarta Sans, warm stone neutrals, orange as the single accent, large radii, a floating pill tab bar. No SNCF logo, colours or brand elements.
-- [ ] A visible mention that the app is not affiliated with SNCF.
-- [ ] A local Supabase stack runs through the Supabase CLI, schema changes are versioned migrations, and an initial migration applies cleanly.
-- [ ] Vitest runs with one sample test, and Playwright runs one smoke test that loads the app against the local stack.
+- [x] Nuxt 4, Vue 3, TypeScript in strict mode and Tailwind are set up; the UI copy is in French.
+- [x] An app shell with navigation to Accueil, Dashboard and Réglages (placeholder pages), mobile-first.
+- [x] Light and dark themes follow the system preference and implement the "Billets" visual direction chosen in the UI prototype (see the spec's UI module): Plus Jakarta Sans, warm stone neutrals, orange as the single accent, large radii, a floating pill tab bar. No SNCF logo, colours or brand elements.
+- [x] A visible mention that the app is not affiliated with SNCF.
+- [x] A local Supabase stack runs through the Supabase CLI, schema changes are versioned migrations, and an initial migration applies cleanly.
+- [x] Vitest runs with one sample test, and Playwright runs one smoke test that loads the app against the local stack.
 - [ ] GitHub Actions on every pull request runs lint, typecheck, Vitest and Playwright (with the local Supabase stack), all green.
 - [ ] Merging to `main` applies migrations to the hosted Supabase project, and Vercel deploys the app through its Git integration with the `vercel` preset.
-- [ ] The README explains how to run the app, run the tests and deploy, and lists the required environment variables by name.
+- [x] The README explains how to run the app, run the tests and deploy, and lists the required environment variables by name.
 
 ## Comments
 
 - 2026-10-16 — UI prototype. Question: what should Veille MAX look like? Three variants were compared (A « Liste clinique », B « Billets », C « Agenda »). **Verdict: B**, because it looks modern and makes the situation clear at a glance. A « Nouveautés » section was added between the trip carousel and « Bientôt ouverts ». The primary source is `.scratch/veille-max-v1/prototype-ui/index.html` (run with the `prototype-ui` entry of `.claude/launch.json`). When the repo is initialised, commit the prototype to a throwaway branch `prototype/ui-variants` and keep it out of `main`. Rewrite the chosen design properly; don't copy the prototype code.
 - 2026-10-16 — UI prototype, round 2. Question: in the "Billets" style, what should the Dashboard and Réglages look like, and do we keep a time-axis ("frise") view? The time-axis leg views of A and C were judged hard to read, so the leg detail stays tickets only (ticket 06). **Verdict: Dashboard D1 « Histoires »** (one card per question, titled with its conclusion) and **Réglages R3 « Billet modèle »** (the trip template drawn as the home ticket, with editing in a bottom sheet). The only "frise" kept is the one-day bar in Réglages showing the accepted zone and the ideal time. The other variants (D2 « Onglets », D3 « Par trajet », R1 « Liste », R2 « Hub ») stay in the prototype file as the primary source.
+- 2026-10-16 — Local work done (commits `be629f7`..`bf16ace` on `main`; prototype parked on `prototype/ui-variants`). Lint, typecheck, Vitest and Playwright pass locally on Node 24, including from a fresh clone that replays both CI jobs. The two unticked boxes are written but need the user's accounts. Status set to `ready-for-human` for these steps:
+  1. **GitHub:** done 2026-10-16. The public repository [tomteixeira/veille-max](https://github.com/tomteixeira/veille-max) was created with `gh`, and `main` was pushed; the prototype branch stays local. Commits are authored with the GitHub noreply email (repo-local `user.email`). Still to do: see `ci.yml` run green on a pull request, then tick the "GitHub Actions" box. Branch protection on `main` requiring both CI jobs is recommended.
+  2. **Hosted Supabase:** create the project. In GitHub, add the `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` secrets and the `SUPABASE_PROJECT_ID` variable. `migrations.yml` stays skipped until the variable exists.
+  3. **Vercel:** import the repository (Nuxt is detected; the `vercel` preset and Node 24 from `engines` are picked automatically). Set `NUXT_PUBLIC_SUPABASE_URL`, `NUXT_PUBLIC_SUPABASE_KEY` (publishable key) and `NUXT_SUPABASE_SECRET_KEY` (secret key) for Production and Preview. Check `/api/health` on the deployed URL, then tick the "Merging to main" box.
+- 2026-10-16 — Decisions made while implementing, worth knowing for the next tickets:
+  - **Node 24 LTS / npm 11.** npm 10 (bundled with Node 22) crashes on a fresh install of this dependency tree and cannot read an npm 11 lockfile. Vercel would hit the same issue on Node 22. `.nvmrc` and `engines` say 24; Node 24 was installed with nvm next to the default 22.
+  - **TypeScript 6.** TypeScript 7 no longer ships the JS compiler API that `vue-tsc` needs. `noUncheckedIndexedAccess` is on, and `test/tsconfig.json` makes `npm run typecheck` cover the tests too.
+  - **Local Supabase on ports 563xx.** Two other local Supabase projects hold the default 543xx ports. Realtime, Storage, Edge Runtime and Analytics are off (unused; ADR 0003).
+  - **Initial migration.** Functions are private by default (anon and authenticated must be granted `execute` explicitly), plus a `public.health()` probe, callable by `service_role` only, behind `GET /api/health`. Playwright checks it.
+  - **`@nuxtjs/supabase` is installed with `redirect: false`.** Ticket 02 turns on the auth redirect. Generated DB types live in `shared/types/database.types.ts` (`npm run db:types`).
+  - **Non-affiliation note** sits in the layout footer, so it shows on every page.
+  - **Follow-ups not done here:** on merge, Vercel deploys and migrations run in parallel, so a deploy can briefly precede its migration. `npm audit` reports high advisories in dev-server-only transitive deps (`node-forge` via `listhen`, `braces` via `globby` in `nitropack`), with no non-breaking fix yet.
