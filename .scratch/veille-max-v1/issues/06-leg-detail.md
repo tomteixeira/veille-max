@@ -6,14 +6,14 @@
 
 **Status:** ready-for-agent
 
-- [ ] The leg view shows the leg and date, a headline with the candidate count, and a banner with the time window and ideal time.
-- [ ] Route filter chips (« Tous » plus one per route, in rank order) filter a vertical stack of ticket cards. Each ticket shows the route rank, departure and arrival with full station names, duration and train number.
-- [ ] The best candidate gets the « Meilleur choix » treatment. Out-of-window candidates stay listed after the in-window ones.
-- [ ] Each ticket explains its rank: how far from the ideal time, or how many minutes outside the window.
-- [ ] The snapshot freshness is shown on the leg view.
-- [ ] « Réserver » on a ticket opens the SNCF Connect `redirect` search link with the route's station codes and the candidate's date and departure time.
-- [ ] « Vérifier en direct sur SNCF Connect » at the end of the list opens the same link at the window's lower bound, or at the start of the day when the window has none.
-- [ ] The link builder lives in the domain core, with a test that pins the URL format.
-- [ ] Réglages has a « Pondération des gares » card (minutes per route rank, default 30): a slider plus a live worked example showing which route wins. Changing it immediately changes out-of-window ordering.
-- [ ] A tap on a home ticket half opens the corresponding leg view.
-- [ ] Playwright: open a leg, filter by route, change the route weight and see the out-of-window order flip for the fixture case.
+- [x] The leg view shows the leg and date, a headline with the candidate count, and a banner with the time window and ideal time.
+- [x] Route filter chips (« Tous » plus one per route, in rank order) filter a vertical stack of ticket cards. Each ticket shows the route rank, departure and arrival with full station names, duration and train number.
+- [x] The best candidate gets the « Meilleur choix » treatment. Out-of-window candidates stay listed after the in-window ones.
+- [x] Each ticket explains its rank: how far from the ideal time, or how many minutes outside the window.
+- [x] The snapshot freshness is shown on the leg view.
+- [x] « Réserver » on a ticket opens the SNCF Connect `redirect` search link with the route's station codes and the candidate's date and departure time.
+- [x] « Vérifier en direct sur SNCF Connect » at the end of the list opens the same link at the window's lower bound, or at the start of the day when the window has none.
+- [x] The link builder lives in the domain core, with a test that pins the URL format.
+- [x] Réglages has a « Pondération des gares » card (minutes per route rank, default 30): a slider plus a live worked example showing which route wins. Changing it immediately changes out-of-window ordering.
+- [x] A tap on a home ticket half opens the corresponding leg view.
+- [x] Playwright: open a leg, filter by route, change the route weight and see the out-of-window order flip for the fixture case.

@@ -134,6 +134,20 @@ describe('evaluation', () => {
     })
   })
 
+  describe('leg settings', () => {
+    it('come with each leg: its window, ideal time and ranked routes', () => {
+      const leg = evaluate({ now: fridayMorning, settings: settings(), observations: [] }).trips[1]?.legs.outbound
+
+      expect(leg?.settings).toEqual({
+        weekday: 5,
+        anchor: 'arrival',
+        window: { start: null, end: '10:00' },
+        idealTime: '09:00',
+        routes: [parisLyonToPartDieu, parisLyonToPerrache, chessyToPartDieu],
+      })
+    })
+  })
+
   describe('leg status', () => {
     it('tells a leg with an in-window best candidate, one with only out-of-window candidates, and one with none', () => {
       const observations = [

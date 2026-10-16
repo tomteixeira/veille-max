@@ -13,6 +13,9 @@ export const TRACKING_HORIZON_DAYS = 30
 /** How many minutes outside the time window one step of route rank is worth, unless the traveller sets it (CONTEXT.md, Route Weight). */
 export const DEFAULT_ROUTE_WEIGHT = 30
 
+/** The largest route weight a traveller can set. */
+export const MAX_ROUTE_WEIGHT = 120
+
 export interface TravellerSettings {
   template: TripTemplate
   /** Minutes per route rank when ranking out-of-window candidates; `DEFAULT_ROUTE_WEIGHT` when not set. */
@@ -61,6 +64,8 @@ export type LegStatus = 'available' | 'outside-window' | 'none' | 'past'
 export interface Leg {
   kind: LegKind
   date: ParisDate
+  /** The settings the leg is evaluated with: its time window, ideal time and ranked routes. */
+  settings: TemplateLeg
   status: LegStatus
   /** In ranking order. */
   candidates: Candidate[]
@@ -104,7 +109,7 @@ export function evaluate({ now, settings, observations }: EvaluationInput): Eval
 }
 
 function evaluateLeg(kind: LegKind, date: ParisDate, today: ParisDate, templateLeg: TemplateLeg, routeWeight: number, observations: readonly TrainObservation[]): Leg {
-  if (date < today) return { kind, date, status: 'past', candidates: [], best: null }
+  if (date < today) return { kind, date, settings: templateLeg, status: 'past', candidates: [], best: null }
 
   const candidates: Candidate[] = []
   for (const train of observations) {
@@ -115,7 +120,7 @@ function evaluateLeg(kind: LegKind, date: ParisDate, today: ParisDate, templateL
   candidates.sort((a, b) => compareCandidates(a, b, routeWeight))
   const best = candidates[0] ?? null
   const status = best === null ? 'none' : best.inWindow ? 'available' : 'outside-window'
-  return { kind, date, status, candidates, best }
+  return { kind, date, settings: templateLeg, status, candidates, best }
 }
 
 /** A candidate with what the ranking reads of it: its time against the leg's window and ideal time. */
@@ -150,10 +155,26 @@ function rankedCandidate(train: TrainObservation, routeRank: number, { anchor, w
  */
 function compareCandidates(a: Candidate, b: Candidate, routeWeight: number): number {
   if (a.inWindow !== b.inWindow) return a.inWindow ? -1 : 1
-  const rankingKeys = (candidate: Candidate) => candidate.inWindow
-    ? [candidate.routeRank, candidate.minutesFromIdeal, minutes(candidate.train.departureTime)]
-    : [candidate.minutesOutsideWindow + routeWeight * (candidate.routeRank - 1), candidate.routeRank, minutes(candidate.train.departureTime)]
-  const [aKeys, bKeys] = [rankingKeys(a), rankingKeys(b)]
+  const difference = a.inWindow
+    ? compareKeys([a.routeRank, a.minutesFromIdeal], [b.routeRank, b.minutesFromIdeal])
+    : compareOutOfWindow(a, b, routeWeight)
+  return difference || minutes(a.train.departureTime) - minutes(b.train.departureTime)
+}
+
+type OutOfWindowRanking = Pick<Candidate, 'minutesOutsideWindow' | 'routeRank'>
+
+/**
+ * How two out-of-window candidates rank, before the departure time breaks a
+ * tie: by minutes outside the time window plus the route weight for each route
+ * rank below 1, then by route rank. Negative when `a` ranks first.
+ */
+export function compareOutOfWindow(a: OutOfWindowRanking, b: OutOfWindowRanking, routeWeight: number): number {
+  const cost = ({ minutesOutsideWindow, routeRank }: OutOfWindowRanking) => minutesOutsideWindow + routeWeight * (routeRank - 1)
+  return compareKeys([cost(a), a.routeRank], [cost(b), b.routeRank])
+}
+
+/** Compares two lists of ranking keys, the first key first. */
+function compareKeys(aKeys: readonly number[], bKeys: readonly number[]): number {
   for (const [index, aKey] of aKeys.entries()) {
     const difference = aKey - bKeys[index]!
     if (difference !== 0) return difference

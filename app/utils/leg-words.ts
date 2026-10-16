@@ -1,7 +1,6 @@
 import type { LegKind, Route, TemplateLeg, TimeAnchor, Weekday } from '#shared/domain/trip-template'
 
-/** The legs in the order a trip runs them. */
-export const LEG_KINDS = ['outbound', 'return'] as const satisfies readonly LegKind[]
+export { LEG_KINDS } from '#shared/domain/trip-template'
 
 export const LEG_NAMES: Record<LegKind, string> = { outbound: 'Aller', return: 'Retour' }
 

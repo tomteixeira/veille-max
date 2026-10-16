@@ -167,6 +167,20 @@ isOneToOne: false
       referencedColumns: ["code"]
     }
                   ]
+                },"traveller_settings": {
+                  Row: {
+                    "route_weight": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "route_weight": number,"user_id"?: string
+                  }
+                  Update: {
+                    "route_weight"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 }
           }
           Views: {

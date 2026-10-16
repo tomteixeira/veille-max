@@ -9,9 +9,10 @@ const tabs = [
 
 const route = useRoute()
 
-// A tab stays active on the pages nested under it (e.g. a leg detail under Accueil).
+// A tab stays active on the pages nested under it, and Accueil on the leg views it opens.
 function isActive(to: string): boolean {
-  return to === '/' ? route.path === '/' : route.path === to || route.path.startsWith(`${to}/`)
+  if (to === '/') return route.path === '/' || route.path.startsWith('/trips/')
+  return route.path === to || route.path.startsWith(`${to}/`)
 }
 </script>
 
