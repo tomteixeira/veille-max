@@ -197,6 +197,7 @@ watch(code, (value) => {
             class="flex h-12 w-full items-center justify-center gap-2.5 rounded-control bg-surface-muted text-sm font-bold transition-opacity hover:opacity-80 disabled:opacity-60"
             @click="continueWithGoogle"
           >
+            <!-- Google's own « G », in its brand colours rather than the app's tokens (Google's sign-in branding rules). -->
             <svg
               viewBox="0 0 48 48"
               class="size-[18px]"

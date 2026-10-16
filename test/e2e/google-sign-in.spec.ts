@@ -87,4 +87,17 @@ test.describe('signed in', () => {
     await page.goto('/confirm')
     await expect(page).toHaveURL('/')
   })
+
+  test('once signed in, the callback lands on the page the traveller asked for before signing in', async ({ page, baseURL }) => {
+    // The cookie the sign-in redirect leaves for a signed-out visit to Réglages. It is named after
+    // the auth cookie (which may be split in chunks: `….0`, `….1`).
+    const { cookies } = await page.context().storageState()
+    const authCookie = cookies.find(cookie => /-auth-token(\.\d+)?$/.test(cookie.name))
+    expect(authCookie).toBeDefined()
+    const redirectCookie = `${authCookie!.name.replace(/\.\d+$/, '')}-redirect-path`
+    await page.context().addCookies([{ name: redirectCookie, value: encodeURIComponent('/settings'), url: baseURL! }])
+
+    await page.goto('/confirm')
+    await expect(page).toHaveURL('/settings')
+  })
 })

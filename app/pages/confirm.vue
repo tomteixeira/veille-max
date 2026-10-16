@@ -10,22 +10,27 @@ const route = useRoute()
 const session = useSupabaseSession()
 const redirectPath = useSupabaseCookieRedirect()
 
+const NOT_FINISHED_MESSAGE = 'La connexion avec Google n’a pas abouti. Réessayez, ou recevez un code par e-mail.'
+
 // Supabase refuses a Google account it does not know while sign-ups are closed, and passes on
 // the other failures (the traveller closed Google's screen, Google refused the client).
-const providerFailure = computed(() => {
-  if (!route.query.error) return null
-  return route.query.error_code === 'signup_disabled'
-    ? 'Ce compte Google n’a pas accès à Veille MAX. Connectez-vous avec l’adresse de votre invitation, ou recevez un code par e-mail.'
-    : 'La connexion avec Google n’a pas abouti. Réessayez, ou recevez un code par e-mail.'
-})
+function providerFailure(errorCode: unknown): string {
+  switch (errorCode) {
+    case 'signup_disabled':
+      return 'Ce compte Google n’a pas accès à Veille MAX. Connectez-vous avec l’adresse de votre invitation, ou recevez un code par e-mail.'
+    default:
+      return NOT_FINISHED_MESSAGE
+  }
+}
+
 const exchangeFailed = ref(false)
-const errorMessage = computed(() =>
-  providerFailure.value
-  ?? (exchangeFailed.value ? 'La connexion avec Google n’a pas abouti. Réessayez, ou recevez un code par e-mail.' : null),
-)
+const errorMessage = computed(() => {
+  if (route.query.error) return providerFailure(route.query.error_code)
+  return exchangeFailed.value ? NOT_FINISHED_MESSAGE : null
+})
 
 onMounted(async () => {
-  if (providerFailure.value) return
+  if (route.query.error) return
   if (session.value) {
     await navigateTo(redirectPath.pluck() || '/', { replace: true })
     return

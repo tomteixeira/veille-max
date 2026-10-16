@@ -120,7 +120,7 @@ export default defineNuxtConfig({
   },
 
   supabase: {
-    // Every page except sign-in requires a signed-in traveller.
+    // Every page except sign-in (`/login`, and `/confirm` after Google) requires a signed-in traveller.
     redirectOptions: {
       login: '/login',
       // Where Google sign-in comes back (`app/pages/confirm.vue`), inside the manifest scope.
