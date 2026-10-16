@@ -1,0 +1,2 @@
+-- Local and CI seed data, loaded by `supabase db reset` after the migrations.
+-- Fixture travellers and snapshots arrive with the tickets that need them.
