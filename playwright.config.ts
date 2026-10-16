@@ -1,8 +1,16 @@
+import { existsSync } from 'node:fs'
 import { defineConfig, devices } from '@playwright/test'
+import { INVITED_TRAVELLER_STATE } from './test/e2e/support/travellers'
 
 const PORT = 3100
 const baseURL = `http://localhost:${PORT}`
 const isCI = !!process.env.CI
+
+// The tests reach the local stack (admin API, mail catcher) with the app's own settings.
+if (existsSync('.env')) process.loadEnvFile('.env')
+
+// The app is used on an iPhone first.
+const iPhone = { ...devices['iPhone 15'], browserName: 'chromium' } as const
 
 /**
  * End-to-end tests (spec, Testing Decisions, seam 3) run against a production
@@ -22,8 +30,10 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
   projects: [
-    // The app is used on an iPhone first.
-    { name: 'mobile', use: { ...devices['iPhone 15'], browserName: 'chromium' } },
+    // Signs the seeded invited traveller in once, through the sign-in screen.
+    { name: 'setup', testMatch: /\.setup\.ts$/, use: iPhone },
+    // Every test starts signed in as that traveller, unless it sets its own `storageState`.
+    { name: 'mobile', use: { ...iPhone, storageState: INVITED_TRAVELLER_STATE }, dependencies: ['setup'] },
   ],
   webServer: {
     command: `npm run build && npx nuxt preview --port ${PORT}`,

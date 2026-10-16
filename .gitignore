@@ -14,6 +14,7 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+test/e2e/.auth/
 
 # Env files (see .env.example)
 .env
