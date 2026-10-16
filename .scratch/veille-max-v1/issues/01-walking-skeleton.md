@@ -12,7 +12,7 @@
 - [x] A visible mention that the app is not affiliated with SNCF.
 - [x] A local Supabase stack runs through the Supabase CLI, schema changes are versioned migrations, and an initial migration applies cleanly.
 - [x] Vitest runs with one sample test, and Playwright runs one smoke test that loads the app against the local stack.
-- [ ] GitHub Actions on every pull request runs lint, typecheck, Vitest and Playwright (with the local Supabase stack), all green.
+- [x] GitHub Actions on every pull request runs lint, typecheck, Vitest and Playwright (with the local Supabase stack), all green.
 - [x] Merging to `main` applies migrations to the hosted Supabase project, and Vercel deploys the app through its Git integration with the `vercel` preset.
 - [x] The README explains how to run the app, run the tests and deploy, and lists the required environment variables by name.
 
@@ -32,3 +32,4 @@
   - **`@nuxtjs/supabase` is installed with `redirect: false`.** Ticket 02 turns on the auth redirect. Generated DB types live in `shared/types/database.types.ts` (`npm run db:types`).
   - **Non-affiliation note** sits in the layout footer, so it shows on every page.
   - **Follow-ups not done here:** on merge, Vercel deploys and migrations run in parallel, so a deploy can briefly precede its migration. `npm audit` reports high advisories in dev-server-only transitive deps (`node-forge` via `listhen`, `braces` via `globby` in `nitropack`), with no non-breaking fix yet.
+- 2026-10-16 — CI ran green on its first pull request, [tomteixeira/veille-max#1](https://github.com/tomteixeira/veille-max/pull/1) (ticket 02): both `ci.yml` jobs passed ([run](https://github.com/tomteixeira/veille-max/actions/runs/38909938260)), the end-to-end tests among them against the local Supabase stack. The « GitHub Actions » box is ticked, so every box of this ticket is now done. Branch protection on `main` requiring both jobs is still recommended.
