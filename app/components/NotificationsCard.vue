@@ -30,20 +30,7 @@ async function toggle() {
 }
 
 /** What the switch explains under its label, for each state of the device in use. */
-const hint = computed(() => {
-  switch (state.value) {
-    case 'install':
-      return 'Ajoutez d’abord Veille MAX à l’écran d’accueil : touchez Partager, puis « Sur l’écran d’accueil ».'
-    case 'unsupported':
-      return 'Ce navigateur ne peut pas recevoir de notifications.'
-    case 'unavailable':
-      return 'Les notifications ne sont pas encore disponibles.'
-    case 'denied':
-      return `Notifications refusées. Autorisez-les pour Veille MAX dans les réglages de ${thisDevice.value}.`
-    default:
-      return 'Nouveaux trains, chaque matin.'
-  }
-})
+const hint = computed(() => notificationsBlocker(state.value, thisDevice.value) ?? 'Nouveaux trains, chaque matin.')
 
 const testState = ref<'idle' | 'sending' | 'failed' | 'unreachable'>('idle')
 const delivered = ref<number | null>(null)

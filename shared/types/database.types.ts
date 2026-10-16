@@ -263,14 +263,14 @@ isOneToOne: false
                   ]
                 },"traveller_settings": {
                   Row: {
-                    "route_weight": number,"user_id": string
+                    "installed_at": string | null,"onboarding_step": string,"route_weight": number | null,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "route_weight": number,"user_id"?: string
+                    "installed_at"?: string | null,"onboarding_step"?: string,"route_weight"?: number | null,"user_id"?: string
                   }
                   Update: {
-                    "route_weight"?: number,"user_id"?: string
+                    "installed_at"?: string | null,"onboarding_step"?: string,"route_weight"?: number | null,"user_id"?: string
                   }
                   Relationships: [
                     

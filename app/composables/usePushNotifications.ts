@@ -20,7 +20,7 @@ function applicationServerKey(base64url: string): Uint8Array<ArrayBuffer> {
 
 /** An iPhone or iPad running the app in Safari rather than from the home screen. */
 function inSafariOnIos(label: DeviceLabel): boolean {
-  return (label === 'iPhone' || label === 'iPad') && !window.matchMedia('(display-mode: standalone)').matches
+  return (label === 'iPhone' || label === 'iPad') && !runsFromHomeScreen()
 }
 
 /**

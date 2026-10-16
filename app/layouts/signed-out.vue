@@ -1,4 +1,4 @@
-<!-- Layout of the pages a signed-out visitor can reach: no tab bar, since every tab requires signing in. -->
+<!-- Layout of the pages without a tab bar: those a signed-out visitor can reach, and onboarding, which leads a new traveller step by step. -->
 <template>
   <div class="mx-auto flex min-h-dvh w-full max-w-lg flex-col pt-[env(safe-area-inset-top)]">
     <main class="flex-1">
