@@ -20,15 +20,10 @@ blob-report/
 .env.*
 !.env.example
 
-# Supabase CLI local state
-supabase/.branches/
-supabase/.temp/
-
 # Editors and OS
 .DS_Store
 .idea/
-.vscode/*
-!.vscode/extensions.json
+.vscode/
 *.log
 
 # Throwaway UI prototype: it lives on the `prototype/ui-variants` branch, not on main
