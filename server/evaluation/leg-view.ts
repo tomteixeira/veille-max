@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Leg, TrainObservation } from '#shared/domain/evaluation'
+import { routeRankOf, type Leg, type TrainObservation } from '#shared/domain/evaluation'
 import type { LegKind } from '#shared/domain/trip-template'
 import { loadTrainsOfDay } from '#shared/utils/observation-store'
 import { loadLastSnapshot } from '#shared/utils/snapshot-store'
@@ -45,8 +45,6 @@ export async function loadBookableTrains(client: SupabaseClient<Database>, trave
 
   const { date, settings: { routes } } = view.leg
   const trains = await loadTrainsOfDay(client, snapshot.id, routes, date)
-  return trains.map(train => ({
-    ...train,
-    routeRank: routes.findIndex(route => route.originCode === train.originCode && route.destinationCode === train.destinationCode) + 1,
-  }))
+  // Every train listed is on one of the leg's routes.
+  return trains.map(train => ({ ...train, routeRank: routeRankOf(train, { routes })! }))
 }

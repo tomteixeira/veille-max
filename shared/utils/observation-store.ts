@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { TrainObservation } from '../domain/evaluation'
+import { sameRoute, type BookedTrain, type TrainObservation } from '../domain/evaluation'
 import type { Route } from '../domain/trip-template'
-import type { Database } from '../types/database.types'
+import type { Database, Tables } from '../types/database.types'
 import type { ParisDate } from './paris-time'
 
 // Reads the train observations (tables `train_observations` and `openings`),
@@ -42,17 +42,8 @@ export async function loadOpenTrains(
   }
 
   return rows
-    .filter(row => routes.some(route => route.originCode === row.origin_code && route.destinationCode === row.destination_code))
-    .map(row => ({
-      date: row.travel_date,
-      trainNumber: row.train_number,
-      originCode: row.origin_code,
-      destinationCode: row.destination_code,
-      // Postgres `time` reads « HH:MM:SS »; the domain uses « HH:MM ».
-      departureTime: row.departure_time.slice(0, 5),
-      arrivalTime: row.arrival_time.slice(0, 5),
-      open: true,
-    }))
+    .map(row => ({ ...trainObservation(row), open: true }))
+    .filter(train => routes.some(route => sameRoute(route, train)))
 }
 
 /**
@@ -81,14 +72,20 @@ export async function loadTrainsOfDay(
   if (error) throw error
 
   return data
-    .filter(row => routes.some(route => route.originCode === row.origin_code && route.destinationCode === row.destination_code))
-    .map(row => ({
-      date: row.travel_date,
-      trainNumber: row.train_number,
-      originCode: row.origin_code,
-      destinationCode: row.destination_code,
-      departureTime: row.departure_time.slice(0, 5),
-      arrivalTime: row.arrival_time.slice(0, 5),
-      open: row.openings.length > 0,
-    }))
+    .map(row => ({ ...trainObservation(row), open: row.openings.length > 0 }))
+    .filter(train => routes.some(route => sameRoute(route, train)))
+}
+
+type ObservationRow = Pick<Tables<'train_observations'>, 'travel_date' | 'train_number' | 'origin_code' | 'destination_code' | 'departure_time' | 'arrival_time'>
+
+function trainObservation(row: ObservationRow): BookedTrain {
+  return {
+    date: row.travel_date,
+    trainNumber: row.train_number,
+    originCode: row.origin_code,
+    destinationCode: row.destination_code,
+    // Postgres `time` reads « HH:MM:SS »; the domain uses « HH:MM ».
+    departureTime: row.departure_time.slice(0, 5),
+    arrivalTime: row.arrival_time.slice(0, 5),
+  }
 }

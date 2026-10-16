@@ -366,6 +366,16 @@ describe('evaluation', () => {
       expect(leg?.candidates.map(({ train }) => train.trainNumber)).toEqual(['6601', '6631'])
     })
 
+    it('rank below every candidate when the booked train runs on another day than the leg', () => {
+      // Booked on Thursday, then the template moved the outbound leg to Friday.
+      const booked = train('6601', parisLyonToPartDieu, '2026-10-22', '06:05', '08:01')
+      const observations = [train('6631', chessyToPartDieu, '2026-10-23', '09:00', '11:00')]
+
+      const leg = evaluate({ now: fridayMorning, settings: settings({ bookings: [booking('2026-W43', 'outbound', booked)] }), observations }).trips[1]?.legs.outbound
+
+      expect(leg?.booking).toMatchObject({ train: { date: '2026-10-22' }, candidatesAbove: 1 })
+    })
+
     it('mark their leg as booked, and leave every other leg without one', () => {
       const booked = train('6680', partDieuToParisLyon, '2026-10-25', '17:04', '19:00', false)
 

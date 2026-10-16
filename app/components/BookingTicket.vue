@@ -11,6 +11,8 @@ const props = defineProps<{
   /** The route weight the leg was ranked with, to explain an out-of-window rank. */
   routeWeight: number
   stationName: (code: string) => string
+  /** Whether the leg has passed: no candidate can do better any more. */
+  past?: boolean
   disabled?: boolean
 }>()
 
@@ -60,6 +62,7 @@ const explanation = computed(() => {
       </p>
 
       <p
+        v-if="!past"
         class="mt-4 text-[13px] font-bold"
         :class="booking.candidatesAbove > 0 ? 'text-accent-ink' : 'text-booked-ink'"
       >

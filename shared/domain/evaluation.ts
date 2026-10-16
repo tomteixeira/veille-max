@@ -152,7 +152,7 @@ function evaluateLeg(
   bookedTrain: BookedTrain | null,
 ): Leg {
   if (date < today) {
-    const booking = bookedTrain && { train: bookedTrain, routeRank: routeRankOf(bookedTrain, templateLeg), ...timeRanking(bookedTrain, templateLeg), candidatesAbove: 0 }
+    const booking = bookedTrain && rankedBooking(bookedTrain, date, templateLeg, [], routeWeight)
     return { kind, date, settings: templateLeg, status: 'past', candidates: [], best: null, booking }
   }
 
@@ -164,28 +164,39 @@ function evaluateLeg(
   }
   candidates.sort((a, b) => compareCandidates(a, b, routeWeight))
   const best = candidates[0] ?? null
-  const booking = bookedTrain && rankedBooking(bookedTrain, templateLeg, candidates, routeWeight)
+  const booking = bookedTrain && rankedBooking(bookedTrain, date, templateLeg, candidates, routeWeight)
 
   let status: LegStatus = best === null ? 'none' : best.inWindow ? 'available' : 'outside-window'
   if (booking) status = 'booked'
   return { kind, date, settings: templateLeg, status, candidates, best, booking }
 }
 
+/** Whether two routes join the same origin and destination stations. */
+export function sameRoute(a: Route, b: Route): boolean {
+  return a.originCode === b.originCode && a.destinationCode === b.destinationCode
+}
+
+/** Whether two trains are the same train, on the same route and date. */
+export function sameTrain(a: BookedTrain, b: BookedTrain): boolean {
+  return a.date === b.date && a.trainNumber === b.trainNumber && sameRoute(a, b)
+}
+
 /** The rank of a train's route among a leg's routes, `null` when it is not one of them. */
-function routeRankOf(train: Route, { routes }: TemplateLeg): number | null {
-  const index = routes.findIndex(route => route.originCode === train.originCode && route.destinationCode === train.destinationCode)
+export function routeRankOf(train: Route, { routes }: Pick<TemplateLeg, 'routes'>): number | null {
+  const index = routes.findIndex(route => sameRoute(route, train))
   return index < 0 ? null : index + 1
 }
 
 /**
  * A booking ranked as if it were a candidate (spec, "Ranking rules"): the
  * candidates ranking strictly above it are the first ones of the ranking. A
- * booking whose route is no longer among the leg's routes ranks below every candidate.
+ * booking that could no longer be a candidate of the leg, its route no longer
+ * among the leg's routes or its train on another day, ranks below every candidate.
  */
-function rankedBooking(train: BookedTrain, templateLeg: TemplateLeg, candidates: readonly Candidate[], routeWeight: number): RankedBooking {
+function rankedBooking(train: BookedTrain, date: ParisDate, templateLeg: TemplateLeg, candidates: readonly Candidate[], routeWeight: number): RankedBooking {
   const routeRank = routeRankOf(train, templateLeg)
   const ranking = timeRanking(train, templateLeg)
-  const candidatesAbove = routeRank === null
+  const candidatesAbove = routeRank === null || train.date !== date
     ? candidates.length
     : candidates.filter(candidate => compareCandidates(candidate, { routeRank, ...ranking, train }, routeWeight) < 0).length
   return { train, routeRank, ...ranking, candidatesAbove }

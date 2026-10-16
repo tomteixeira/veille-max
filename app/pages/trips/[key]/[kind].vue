@@ -1,7 +1,7 @@
 <!-- The leg view (spec, "Leg detail"): the leg's booking, and every candidate of the leg as a ticket, in ranking order. -->
 <script setup lang="ts">
 import { ChevronLeft, Clock, ExternalLink, TicketPlus } from '@lucide/vue'
-import type { BookedTrain, Candidate } from '#shared/domain/evaluation'
+import { sameTrain, type BookedTrain, type Candidate } from '#shared/domain/evaluation'
 import { liveCheckLink } from '#shared/domain/sncf-connect'
 import { isLegKind } from '#shared/domain/trip-template'
 import { cancelBooking, saveBooking } from '#shared/utils/booking-store'
@@ -62,13 +62,17 @@ async function changeBooking(change: () => Promise<void>): Promise<void> {
 }
 
 /** Declares `train` as the leg's booking, replacing the one held, if any. */
+/** The leg kind of the URL, `null` when it names no leg (the view then shows « not tracked »). */
+const legKind = computed(() => isLegKind(kind.value) ? kind.value : null)
+
 async function book(train: BookedTrain): Promise<void> {
-  const legKind = kind.value
-  if (!travellerId || !isLegKind(legKind)) throw new Error('No leg to book')
+  const legKindValue = legKind.value
+  if (!travellerId) throw new Error('No signed-in traveller')
+  if (!legKindValue) throw new Error('No leg to book')
   const { date, trainNumber, originCode, destinationCode, departureTime, arrivalTime } = train
   await changeBooking(() => saveBooking(supabase, travellerId, {
     tripKey: key.value,
-    legKind,
+    legKind: legKindValue,
     train: { date, trainNumber, originCode, destinationCode, departureTime, arrivalTime },
   }))
 }
@@ -80,9 +84,12 @@ async function bookCandidate(candidate: Candidate): Promise<void> {
 }
 
 async function cancel(): Promise<void> {
-  const legKind = kind.value
-  if (!travellerId || !isLegKind(legKind)) return
-  await changeBooking(() => cancelBooking(supabase, travellerId, key.value, legKind)).catch(() => {
+  const legKindValue = legKind.value
+  await changeBooking(async () => {
+    if (!travellerId) throw new Error('No signed-in traveller')
+    if (!legKindValue) throw new Error('No leg to cancel')
+    await cancelBooking(supabase, travellerId, key.value, legKindValue)
+  }).catch(() => {
     bookingFailed.value = true
   })
 }
@@ -187,6 +194,7 @@ const pickerTitleId = useId()
         :booking="booking"
         :route-weight="view!.routeWeight"
         :station-name="stationName"
+        :past="leg.status === 'past'"
         :disabled="!interactive || saving"
         @cancel="cancel"
       />
@@ -214,7 +222,7 @@ const pickerTitleId = useId()
       <BookingPicker
         v-if="pickerOpen && leg"
         :trip-key="key"
-        :kind="kind"
+        :kind="leg.kind"
         :booked="booking?.train ?? null"
         :station-name="stationName"
         :title-id="pickerTitleId"

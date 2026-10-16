@@ -1,4 +1,4 @@
-import type { BookedTrain, Candidate, Leg, LegStatus, RankedBooking, Trip } from '#shared/domain/evaluation'
+import type { Candidate, Leg, LegStatus, RankedBooking, Trip } from '#shared/domain/evaluation'
 import type { TemplateLeg } from '#shared/domain/trip-template'
 import type { ParisDate } from '#shared/utils/paris-time'
 
@@ -78,11 +78,6 @@ export function rankExplanation({ inWindow, minutesFromIdeal, minutesOutsideWind
   }
   if (minutesFromIdeal === 0) return 'Pile à l’heure idéale'
   return `À ${durationText(minutesFromIdeal)} de l’heure idéale`
-}
-
-/** Whether two trains are the same train, on the same route and date. */
-export function sameTrain(a: BookedTrain, b: BookedTrain): boolean {
-  return a.date === b.date && a.trainNumber === b.trainNumber && a.originCode === b.originCode && a.destinationCode === b.destinationCode
 }
 
 /** Where a booking stands against the candidates: « 2 trains font mieux », « Rien de mieux pour l’instant ». */

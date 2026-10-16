@@ -5,11 +5,12 @@
 -->
 <script setup lang="ts">
 import { BadgeCheck, X } from '@lucide/vue'
-import type { BookedTrain } from '#shared/domain/evaluation'
+import { sameTrain, type BookedTrain } from '#shared/domain/evaluation'
+import type { LegKind } from '#shared/domain/trip-template'
 
 const props = defineProps<{
   tripKey: string
-  kind: string
+  kind: LegKind
   /** The train the traveller holds for the leg, if any. */
   booked: BookedTrain | null
   stationName: (code: string) => string
