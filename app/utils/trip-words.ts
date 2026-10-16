@@ -1,4 +1,4 @@
-import type { Candidate, Leg, LegStatus, RankedBooking, Trip } from '#shared/domain/evaluation'
+import type { Candidate, ImprovementKind, Leg, LegStatus, RankedBooking, Trip } from '#shared/domain/evaluation'
 import type { LegSettings } from '#shared/domain/trip-template'
 import type { ParisDate } from '#shared/utils/paris-time'
 import type { DayChoice } from './leg-words'
@@ -10,6 +10,18 @@ export const LEG_STATUS_NAMES: Record<LegStatus, string> = {
   'outside-window': 'Hors fenêtre',
   'none': 'Rien pour l’instant',
   'past': 'Passé',
+}
+
+/** The chip of an improvement in « Nouveautés ». */
+export const IMPROVEMENT_NAMES: Record<ImprovementKind, string> = {
+  'first-candidate': 'Premier train',
+  'new-best': 'Meilleur choix',
+  'better-than-booking': 'Mieux que votre billet',
+}
+
+/** « 3 nouveaux trains », « 1 nouveau train »: the home headline on a morning with improvements. */
+export function newTrainsText(count: number): string {
+  return count > 1 ? `${count} nouveaux trains` : `${count} nouveau train`
 }
 
 // Calendar days are formatted at UTC midnight, where they never shift.

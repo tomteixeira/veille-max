@@ -68,10 +68,20 @@ export interface Booking {
   train: BookedTrain
 }
 
+/** A leg's reference best candidate, as the previous evaluation left it (CONTEXT.md, Improvement). */
+export interface LegReference {
+  tripKey: string
+  legKind: LegKind
+  /** The leg's best candidate then, `null` when it had none. */
+  train: BookedTrain | null
+}
+
 export interface EvaluationInput {
   now: Date
   settings: TravellerSettings
   observations: readonly TrainObservation[]
+  /** The references stored after the previous snapshot. A leg without one is told its first candidate. */
+  references?: readonly LegReference[]
 }
 
 /** A train with an open seat on one of a leg's routes, on the leg's date, in the latest snapshot. */
@@ -138,6 +148,24 @@ export interface UpcomingTrip extends Trip {
   opensOn: ParisDate
 }
 
+/**
+ * Why a leg's new best candidate is worth a notification:
+ * - `first-candidate`: the leg had no candidate, no reference and no booking;
+ * - `new-best`: it ranks strictly above the previous best candidate, itself above the booking if any;
+ * - `better-than-booking`: it ranks strictly above the booking, which was the reference.
+ */
+export type ImprovementKind = 'first-candidate' | 'new-best' | 'better-than-booking'
+
+/** A leg whose best candidate ranks strictly above its reference (CONTEXT.md, Improvement). */
+export interface Improvement {
+  tripKey: string
+  legKind: LegKind
+  date: ParisDate
+  kind: ImprovementKind
+  /** The leg's new best candidate. */
+  candidate: Candidate
+}
+
 export interface Evaluation {
   /** The tracked trips, soonest first. Trips whose legs have all passed are archived: left out. */
   trips: Trip[]
@@ -145,9 +173,13 @@ export interface Evaluation {
   upcoming: UpcomingTrip[]
   /** How many bookings are held for legs that have not passed, against `MAX_ACTIVE_BOOKINGS`. */
   activeBookings: number
+  /** The new reference of every tracked leg that has not passed, muted or not: its best candidate now. */
+  references: LegReference[]
+  /** The improvements to notify, against `EvaluationInput.references`: never on a muted leg. */
+  improvements: Improvement[]
 }
 
-export function evaluate({ now, settings, observations }: EvaluationInput): Evaluation {
+export function evaluate({ now, settings, observations, references: previousReferences = [] }: EvaluationInput): Evaluation {
   const today = parisDate(now)
   const horizonEnd = addDays(today, TRACKING_HORIZON_DAYS)
   const { template, customisations = {}, mutes = [] } = settings
@@ -158,8 +190,13 @@ export function evaluate({ now, settings, observations }: EvaluationInput): Eval
   const bookingOf = (tripKey: string, kind: LegKind) =>
     bookings.find(booking => booking.tripKey === tripKey && booking.legKind === kind)?.train ?? null
 
+  const previousReference = (tripKey: string, kind: LegKind) =>
+    previousReferences.find(reference => reference.tripKey === tripKey && reference.legKind === kind)?.train ?? null
+
   const trips: Trip[] = []
   const upcoming: UpcomingTrip[] = []
+  const references: LegReference[] = []
+  const improvements: Improvement[] = []
   // The template's outbound weekday two weeks before today's, so that a trip
   // whose return leg was moved later is still found, then every week after it.
   let outboundDate = addDays(today, template.outbound.weekday - weekday(today) - 14)
@@ -179,13 +216,44 @@ export function evaluate({ now, settings, observations }: EvaluationInput): Eval
     const trip: Trip = { key, customised: customisation !== undefined, muted, legs: { outbound: evaluated('outbound'), return: evaluated('return') } }
 
     // Tracked as soon as its first leg enters the horizon.
-    if (firstDate <= horizonEnd) trips.push(trip)
-    else upcoming.push({ ...trip, opensOn: addDays(firstDate, -TRACKING_HORIZON_DAYS) })
+    if (firstDate > horizonEnd) {
+      upcoming.push({ ...trip, opensOn: addDays(firstDate, -TRACKING_HORIZON_DAYS) })
+      continue
+    }
+    trips.push(trip)
+    for (const leg of Object.values(trip.legs)) {
+      if (leg.status === 'past') continue
+      references.push({ tripKey: key, legKind: leg.kind, train: leg.best && bookedTrain(leg.best.train) })
+      const kind = improvementKind(leg, previousReference(key, leg.kind), routeWeight)
+      // Muted legs keep their reference up to date, but are never notified.
+      if (kind && !leg.muted) improvements.push({ tripKey: key, legKind: leg.kind, date: leg.date, kind, candidate: leg.best! })
+    }
   }
   // Customised dates can put a trip before the one of the previous week.
   const soonestFirst = (a: Trip, b: Trip) => firstLegDate(a).localeCompare(firstLegDate(b))
   const activeBookings = bookings.filter(booking => booking.train.date >= today).length
-  return { trips: trips.sort(soonestFirst), upcoming: upcoming.sort(soonestFirst), activeBookings }
+  return { trips: trips.sort(soonestFirst), upcoming: upcoming.sort(soonestFirst), activeBookings, references, improvements }
+}
+
+/** A train without whether it has a seat. */
+function bookedTrain({ open: _open, ...train }: TrainObservation): BookedTrain {
+  return train
+}
+
+/**
+ * Whether a leg's best candidate improves on its reference (spec, "Ranking
+ * rules"): the better of the previous best candidate and the booking. A leg
+ * with neither is improved by its first candidate.
+ */
+function improvementKind({ date, settings, best, booking }: Leg, previous: BookedTrain | null, routeWeight: number): ImprovementKind | null {
+  if (!best) return null
+  if (!previous && !booking) return 'first-candidate'
+
+  const compare = (a: BookedTrain, b: BookedTrain) => compareTrains(a, b, date, settings, routeWeight)
+  if (booking && compare(best.train, booking.train) >= 0) return null
+  if (previous && compare(best.train, previous) >= 0) return null
+  // The booking is the reference unless the previous best candidate ranks strictly above it.
+  return booking && !(previous && compare(previous, booking.train) < 0) ? 'better-than-booking' : 'new-best'
 }
 
 function firstLegDate({ legs }: Trip): ParisDate {
@@ -283,12 +351,29 @@ export function routeRankOf(train: Route, { routes }: Pick<LegSettings, 'routes'
  * among the leg's routes or its train on another day, ranks below every candidate.
  */
 function rankedBooking(train: BookedTrain, date: ParisDate, settings: LegSettings, candidates: readonly Candidate[], routeWeight: number): RankedBooking {
-  const routeRank = routeRankOf(train, settings)
-  const ranking = timeRanking(train, settings)
-  const candidatesAbove = routeRank === null || train.date !== date
+  const ranked = rankedTrain(train, date, settings)
+  const candidatesAbove = ranked === null
     ? candidates.length
-    : candidates.filter(candidate => compareCandidates(candidate, { routeRank, ...ranking, train }, routeWeight) < 0).length
-  return { train, routeRank, ...ranking, candidatesAbove }
+    : candidates.filter(candidate => compareCandidates(candidate, ranked, routeWeight) < 0).length
+  return { train, routeRank: routeRankOf(train, settings), ...timeRanking(train, settings), candidatesAbove }
+}
+
+/** A train ranked as a candidate of a leg, `null` when it could not be one: its route is not among the leg's, or it runs on another day. */
+function rankedTrain(train: BookedTrain, date: ParisDate, settings: LegSettings): Ranked | null {
+  const routeRank = routeRankOf(train, settings)
+  if (routeRank === null || train.date !== date) return null
+  return { train, routeRank, ...timeRanking(train, settings) }
+}
+
+/**
+ * How two trains rank as candidates of a leg, whether or not they have a seat:
+ * negative when `a` ranks first. A train that could not be a candidate ranks
+ * below every one that could.
+ */
+function compareTrains(a: BookedTrain, b: BookedTrain, date: ParisDate, settings: LegSettings, routeWeight: number): number {
+  const [rankedA, rankedB] = [rankedTrain(a, date, settings), rankedTrain(b, date, settings)]
+  if (!rankedA || !rankedB) return Number(!rankedA) - Number(!rankedB)
+  return compareCandidates(rankedA, rankedB, routeWeight)
 }
 
 /** What the ranking reads of a train's times: against the leg's window and ideal time. */

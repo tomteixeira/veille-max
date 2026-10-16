@@ -35,12 +35,14 @@ export async function useTrip(key: string) {
   /** Changes a leg: the first change customises the trip, detaching it from the trip template. */
   async function saveLeg(kind: LegKind, date: ParisDate, settings: LegSettings): Promise<void> {
     await saveCustomisedTrip(supabase, key, customiseTrip(current(), kind, { ...settings, date }))
+    await resetLegReferences()
     await refresh()
   }
 
   /** Gives the trip back to the trip template. */
   async function reset(): Promise<void> {
     await resetTrip(supabase, key)
+    await resetLegReferences()
     await refresh()
   }
 
