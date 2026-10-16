@@ -1,12 +1,12 @@
 <!--
-  Edits one leg of the trip template, inside a <BottomSheet />: weekday, time
-  window, ideal time and ranked routes. Changes stay a draft until « OK » saves
-  them; « Annuler » drops them.
+  Edits one leg, of the trip template or of a trip, inside a <BottomSheet />:
+  its day (a weekday or a date), time window, ideal time and ranked routes.
+  Changes stay a draft until « OK » saves them; « Annuler » drops them.
   The window is edited as a single bound (« Arriver avant 10:00 »), although
   the domain accepts both bounds: a window with both keeps them until the
   traveller changes its bound or its time.
 -->
-<script setup lang="ts">
+<script setup lang="ts" generic="Day extends string | number">
 import { Check, ChevronDown, ChevronUp, X } from '@lucide/vue'
 import {
   addRoute,
@@ -14,20 +14,25 @@ import {
   removeRoute,
   routeProblem,
   type LegKind,
+  type LegSettings,
   type RouteProblem,
   type Station,
-  type TemplateLeg,
   type TimeAnchor,
 } from '#shared/domain/trip-template'
 
 const props = defineProps<{
   kind: LegKind
-  leg: TemplateLeg
+  /** The sheet's title: « Aller par défaut », « Aller du 23 – 25 oct. ». */
+  title: string
+  /** The day the leg runs, among `days`. */
+  day: Day
+  days: readonly DayChoice<Day>[]
+  leg: LegSettings
   stations: readonly Station[]
   stationName: (code: string) => string
   /** The leg's title, also naming the sheet (`aria-labelledby`). */
   titleId: string
-  save: (leg: TemplateLeg) => Promise<void>
+  save: (day: Day, leg: LegSettings) => Promise<void>
 }>()
 
 const emit = defineEmits<{ close: [] }>()
@@ -37,7 +42,7 @@ const ids = { window: useId(), windowTime: useId(), idealTime: useId(), routes: 
 type Bound = 'before' | 'after'
 
 /** The single bound the editor shows: the end of the window if it has one, else its start. */
-function initialBound({ anchor, window }: TemplateLeg): { bound: Bound, time: string } {
+function initialBound({ anchor, window }: LegSettings): { bound: Bound, time: string } {
   if (window.start && window.end) return anchor === 'arrival' ? { bound: 'before', time: window.end } : { bound: 'after', time: window.start }
   if (window.end) return { bound: 'before', time: window.end }
   if (window.start) return { bound: 'after', time: window.start }
@@ -55,7 +60,7 @@ const ROUTE_PROBLEMS: Record<RouteProblem, string> = {
 }
 
 const initial = initialBound(props.leg)
-const weekday = ref(props.leg.weekday)
+const day = ref(props.day) as Ref<Day>
 const anchor = ref<TimeAnchor>(props.leg.anchor)
 const bound = ref<Bound>(initial.bound)
 const boundTime = ref(initial.time)
@@ -67,11 +72,11 @@ watch([bound, boundTime], () => {
   windowChanged.value = true
 })
 
-const draft = computed((): TemplateLeg => {
+const draft = computed((): LegSettings => {
   const time = boundTime.value || null
   const singleBound = bound.value === 'before' ? { start: null, end: time } : { start: time, end: null }
   const window = windowChanged.value ? singleBound : props.leg.window
-  return { weekday: weekday.value, anchor: anchor.value, window, idealTime: idealTime.value, routes: routes.value }
+  return { anchor: anchor.value, window, idealTime: idealTime.value, routes: routes.value }
 })
 
 // « + Ajouter une route »
@@ -103,7 +108,7 @@ async function submit() {
   saving.value = true
   saveFailed.value = false
   try {
-    await props.save(draft.value)
+    await props.save(day.value, draft.value)
     emit('close')
   }
   catch {
@@ -122,7 +127,7 @@ async function submit() {
         :id="titleId"
         class="text-xl font-extrabold tracking-tight"
       >
-        {{ LEG_NAMES[kind] }} par défaut
+        {{ title }}
       </h2>
       <div class="flex gap-2">
         <button
@@ -157,22 +162,29 @@ async function submit() {
         </legend>
         <div class="mt-2 grid grid-cols-7 gap-1.5">
           <label
-            v-for="day in WEEKDAYS"
-            :key="day"
+            v-for="choice in days"
+            :key="choice.value"
             class="relative"
           >
             <input
-              v-model="weekday"
+              v-model="day"
               type="radio"
-              :name="`${kind}-weekday`"
-              :value="day"
-              :aria-label="WEEKDAY_NAMES[day]"
+              :name="`${kind}-day`"
+              :value="choice.value"
+              :aria-label="choice.label"
               class="peer absolute inset-0 z-10 cursor-pointer appearance-none opacity-0"
             >
             <span
-              class="flex h-10 cursor-pointer items-center justify-center rounded-xl bg-surface-muted text-[12px] font-bold text-ink-muted transition peer-checked:bg-inverse peer-checked:text-on-inverse peer-focus-visible:outline-2 peer-focus-visible:outline-accent"
+              class="flex cursor-pointer flex-col items-center justify-center rounded-xl bg-surface-muted text-[12px] leading-tight font-bold text-ink-muted transition peer-checked:bg-inverse peer-checked:text-on-inverse peer-focus-visible:outline-2 peer-focus-visible:outline-accent"
+              :class="choice.detail ? 'h-12' : 'h-10'"
               aria-hidden="true"
-            >{{ WEEKDAY_NAMES[day].slice(0, 3) }}</span>
+            >
+              {{ choice.short }}
+              <span
+                v-if="choice.detail"
+                class="tnum"
+              >{{ choice.detail }}</span>
+            </span>
           </label>
         </div>
       </fieldset>

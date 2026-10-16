@@ -1,19 +1,22 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { evaluate, TRACKING_HORIZON_DAYS, type Leg, type Trip } from '#shared/domain/evaluation'
+import { evaluate, TRACKING_HORIZON_DAYS, type Leg, type Trip, type UpcomingTrip } from '#shared/domain/evaluation'
 import { loadOpenTrains } from '#shared/utils/observation-store'
 import { addDays, parisDate } from '#shared/utils/paris-time'
 import { loadLastSnapshot } from '#shared/utils/snapshot-store'
 import { loadRouteWeight } from '#shared/utils/traveller-settings-store'
+import { loadCustomisations, loadMutes } from '#shared/utils/trip-store'
 import { loadTripTemplate } from '#shared/utils/trip-template-store'
 import type { Database } from '#shared/types/database.types'
 
 export interface TravellerEvaluation {
   /** The route weight the candidates were ranked with. */
   routeWeight: number
-  /** Whether the traveller's trip template ranks any route yet. */
+  /** Whether the traveller's trip template, or one of their customised trips, ranks any route yet. */
   hasRoutes: boolean
   /** The tracked trips, soonest first, each leg with its ranked candidates in the latest snapshot. */
   trips: Trip[]
+  /** The next trips beyond the tracking horizon, « Bientôt ouverts ». */
+  upcoming: UpcomingTrip[]
   /** The full name of every station the trips' routes and candidates use, by code. */
   stationNames: Record<string, string>
 }
@@ -24,20 +27,29 @@ export interface TravellerEvaluation {
  * is the traveller's own client, so RLS limits it to their rows.
  */
 export async function evaluateTraveller(client: SupabaseClient<Database>, travellerId: string, now: Date): Promise<TravellerEvaluation> {
-  const [template, routeWeight, snapshot] = await Promise.all([
+  const [template, routeWeight, customisations, mutes, snapshot] = await Promise.all([
     loadTripTemplate(client, travellerId),
     loadRouteWeight(client, travellerId),
+    loadCustomisations(client, travellerId),
+    loadMutes(client, travellerId),
     loadLastSnapshot(client),
   ])
-  const routes = [...template.outbound.routes, ...template.return.routes]
+  const templateRoutes = [...template.outbound.routes, ...template.return.routes]
+  const customisedRoutes = Object.values(customisations).flatMap(trip => [...trip.outbound.routes, ...trip.return.routes])
 
   const today = parisDate(now)
   const observations = snapshot
-    ? await loadOpenTrains(client, snapshot.id, routes, { from: today, to: addDays(today, TRACKING_HORIZON_DAYS) })
+    ? await loadOpenTrains(client, snapshot.id, [...templateRoutes, ...customisedRoutes], { from: today, to: addDays(today, TRACKING_HORIZON_DAYS) })
     : []
-  const { trips } = evaluate({ now, settings: { template, routeWeight }, observations })
+  const { trips, upcoming } = evaluate({ now, settings: { template, routeWeight, customisations, mutes }, observations })
 
-  return { routeWeight, hasRoutes: routes.length > 0, trips, stationNames: await loadStationNames(client, trips) }
+  return {
+    routeWeight,
+    hasRoutes: templateRoutes.length > 0 || customisedRoutes.length > 0,
+    trips,
+    upcoming,
+    stationNames: await loadStationNames(client, [...trips, ...upcoming]),
+  }
 }
 
 /** The code of every station a leg's routes and candidates use. */

@@ -33,7 +33,7 @@ const headingId = useId()
           {{ LEG_NAMES[leg.kind] }} · {{ shortDay(leg.date) }}
         </NuxtLink>
       </h3>
-      <AppChip>{{ LEG_STATUS_NAMES[leg.status] }}</AppChip>
+      <AppChip>{{ legChip(leg) }}</AppChip>
     </div>
 
     <template v-if="leg.best">

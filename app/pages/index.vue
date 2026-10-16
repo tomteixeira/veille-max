@@ -8,6 +8,7 @@ const today = useState('home-today', () => formatParisLongDay(new Date()))
 const [lastSnapshot, { data: home }] = await Promise.all([useLastSnapshotTime(), useFetch('/api/home')])
 
 const trips = computed(() => home.value?.trips ?? [])
+const upcoming = computed(() => home.value?.upcoming ?? [])
 const headline = computed(() => home.value?.hasRoutes
   ? { title: `${trips.value.length} week-end${trips.value.length > 1 ? 's' : ''}`, accent: 'sous surveillance.' }
   : { title: 'Rien à surveiller', accent: 'pour l’instant.' })
@@ -89,7 +90,47 @@ const steps = [
     </section>
 
     <section
-      v-else
+      v-if="home?.hasRoutes && upcoming.length > 0"
+      class="mt-6 px-6"
+      aria-labelledby="upcoming-title"
+    >
+      <h2
+        id="upcoming-title"
+        class="text-base font-extrabold tracking-tight"
+      >
+        Bientôt ouverts
+      </h2>
+      <ul class="mt-3 divide-y divide-line rounded-card bg-surface">
+        <li
+          v-for="trip in upcoming"
+          :key="trip.key"
+          class="flex items-center gap-3 px-5 py-4"
+          :aria-label="`Week-end du ${tripTitle(trip)}`"
+        >
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-bold">
+              {{ tripTitle(trip) }}
+            </p>
+            <p class="tnum mt-0.5 text-[13px] font-medium text-ink-muted">
+              {{ opensOnText(trip.opensOn) }}
+            </p>
+            <TripChips
+              :trip="trip"
+              class="mt-1.5"
+            />
+          </div>
+          <NuxtLink
+            :to="`/trips/${trip.key}`"
+            class="shrink-0 rounded-full bg-inverse px-4 py-2 text-[13px] font-bold text-on-inverse transition-opacity hover:opacity-90"
+          >
+            Préparer<span class="sr-only"> le week-end du {{ tripTitle(trip) }}</span>
+          </NuxtLink>
+        </li>
+      </ul>
+    </section>
+
+    <section
+      v-if="!home?.hasRoutes"
       class="mt-7 px-6"
       aria-labelledby="first-trip-title"
     >

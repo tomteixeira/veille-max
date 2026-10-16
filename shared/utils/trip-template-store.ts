@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { defaultTripTemplate, type LegKind, type Station, type TemplateLeg, type TripTemplate, type Weekday } from '../domain/trip-template'
+import { defaultTripTemplate, type LegKind, type LegSettings, type Station, type TemplateLeg, type TripTemplate, type Weekday } from '../domain/trip-template'
 import type { Database, Tables } from '../types/database.types'
 
 // Reads and writes a traveller's trip template in Supabase (tables
@@ -35,17 +35,22 @@ export async function loadTripTemplate(client: Client, travellerId: string): Pro
 }
 
 function templateLeg(row: Tables<'template_legs'>, routes: Tables<'template_routes'>[]): TemplateLeg {
+  return { weekday: row.weekday as Weekday, ...legSettings(row, routes.filter(route => route.leg_kind === row.kind)) }
+}
+
+/** The settings of a leg row (template or customised trip) and its route rows, in rank order. */
+export function legSettings(
+  row: Pick<Tables<'template_legs'>, 'anchor' | 'window_start' | 'window_end' | 'ideal_time'>,
+  routes: readonly Pick<Tables<'template_routes'>, 'origin_code' | 'destination_code'>[],
+): LegSettings {
   return {
-    weekday: row.weekday as Weekday,
     anchor: row.anchor,
     window: {
       start: row.window_start === null ? null : hoursAndMinutes(row.window_start),
       end: row.window_end === null ? null : hoursAndMinutes(row.window_end),
     },
     idealTime: hoursAndMinutes(row.ideal_time),
-    routes: routes
-      .filter(route => route.leg_kind === row.kind)
-      .map(route => ({ originCode: route.origin_code, destinationCode: route.destination_code })),
+    routes: routes.map(route => ({ originCode: route.origin_code, destinationCode: route.destination_code })),
   }
 }
 

@@ -4,9 +4,9 @@
   is decorative; the caption carries the same information for everyone.
 -->
 <script setup lang="ts">
-import type { LocalTime, TemplateLeg } from '#shared/domain/trip-template'
+import type { LegSettings, LocalTime } from '#shared/domain/trip-template'
 
-const props = defineProps<{ leg: TemplateLeg }>()
+const props = defineProps<{ leg: LegSettings }>()
 
 // Trains run from about 05:00 to midnight.
 const DAY_START = 5 * 60
