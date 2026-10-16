@@ -44,11 +44,12 @@ export async function hasAccount(address: string): Promise<boolean> {
 /**
  * Invites a new traveller, as the README says to: an account with a confirmed
  * email, so they can ask for a sign-in code. For tests that need a traveller of
- * their own; remove them with `removeTraveller`.
+ * their own; remove them with `removeTraveller`. Returns their id.
  */
-export async function inviteTraveller(address: string): Promise<void> {
-  const { error } = await authAdmin().createUser({ email: address, email_confirm: true })
+export async function inviteTraveller(address: string): Promise<string> {
+  const { data, error } = await authAdmin().createUser({ email: address, email_confirm: true })
   expect(error).toBeNull()
+  return data.user!.id
 }
 
 /** Deletes the traveller's account, and with it every row they own. */

@@ -5,9 +5,19 @@ useHead({ title: 'Accueil' })
 
 // Computed once on the server so the hydrated page shows the same day.
 const today = useState('home-today', () => formatParisLongDay(new Date()))
-const lastSnapshot = await useLastSnapshotTime()
+const [lastSnapshot, { data: home }] = await Promise.all([useLastSnapshotTime(), useFetch('/api/home')])
 
-// Placeholder halves until the traveller has a trip template (ticket 03).
+const trips = computed(() => home.value?.trips ?? [])
+const headline = computed(() => home.value?.hasRoutes
+  ? { title: `${trips.value.length} week-end${trips.value.length > 1 ? 's' : ''}`, accent: 'sous surveillance.' }
+  : { title: 'Rien à surveiller', accent: 'pour l’instant.' })
+
+/** A station's full name; its code if the station reference does not know it. */
+function stationName(code: string): string {
+  return home.value?.stationNames[code] ?? code
+}
+
+// Placeholder halves until the traveller ranks a route in their trip template.
 const legs = [
   { kind: 'Aller', weekday: 'Vendredi' },
   { kind: 'Retour', weekday: 'Dimanche' },
@@ -36,8 +46,8 @@ const steps = [
   <div>
     <PageHeader
       :eyebrow="today"
-      title="Rien à surveiller"
-      accent="pour l’instant."
+      :title="headline.title"
+      :accent="headline.accent"
     >
       <div class="mt-4 flex flex-wrap gap-2">
         <AppChip
@@ -63,6 +73,23 @@ const steps = [
     </PageHeader>
 
     <section
+      v-if="home?.hasRoutes"
+      class="mt-7"
+      aria-label="Vos week-ends"
+    >
+      <div class="no-scrollbar flex snap-x snap-mandatory scroll-px-6 gap-4 overflow-x-auto px-6 pb-4">
+        <TripTicket
+          v-for="trip in trips"
+          :key="trip.key"
+          :trip="trip"
+          :station-name="stationName"
+          class="w-[302px] shrink-0 snap-start"
+        />
+      </div>
+    </section>
+
+    <section
+      v-else
       class="mt-7 px-6"
       aria-labelledby="first-trip-title"
     >
@@ -115,6 +142,7 @@ const steps = [
     </section>
 
     <section
+      v-if="!home?.hasRoutes"
       class="mt-8 px-6"
       aria-labelledby="how-it-works-title"
     >
