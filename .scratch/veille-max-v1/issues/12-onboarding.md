@@ -10,3 +10,7 @@
 - [ ] Steps can be skipped. Progress is persisted per traveller.
 - [ ] While a step is incomplete, the home screen shows a banner naming the missing step, with a link back to it.
 - [ ] Playwright: a new invited traveller goes through the flow; the banner disappears once every step is done (standalone mode and permission mocked).
+
+## Comments
+
+- 2026-10-16 — From ticket 02: the Réglages « Compte et application » card has an « Application » row that shows « Bientôt ». Fill it with the installation state from step 2 (« Installée sur l’écran d’accueil », as in the prototype R3).

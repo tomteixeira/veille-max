@@ -4,7 +4,7 @@ Veille MAX tracks MAX JEUNE seat availability on a traveller's preferred routes.
 
 > Veille MAX is not affiliated with SNCF Voyageurs or SNCF Connect. Availability comes from the SNCF open data (`tgvmax` dataset, ODbL licence).
 
-**Status:** walking skeleton. The app shell, the local Supabase stack and the CI pipeline are in place; features land ticket by ticket (see [the v1 spec](.scratch/veille-max-v1/spec.md) and [its tickets](.scratch/veille-max-v1/issues/)).
+**Status:** walking skeleton plus sign-in. The app shell, email-code sign-in, the local Supabase stack and the CI pipeline are in place; features land ticket by ticket (see [the v1 spec](.scratch/veille-max-v1/spec.md) and [its tickets](.scratch/veille-max-v1/issues/)).
 
 ## Stack
 
@@ -26,6 +26,8 @@ npm run dev             # http://localhost:3000
 
 The local stack uses the 563xx port range so it can run next to other local Supabase projects: API on `56321`, Postgres on `56322`, Studio on `56323`, the mail catcher on `56324`. Stop it with `npm run supabase:stop`.
 
+Sign in as the seeded traveller `voyageur@veille-max.test`: the code arrives in the mail catcher, http://127.0.0.1:56324. The seed loads when the stack starts on a fresh database, or with `npm run db:reset`. After changing `supabase/config.toml`, restart the stack (`npm run supabase:stop && npm run supabase:start`).
+
 ## Scripts
 
 | Script | What it does |
@@ -46,7 +48,7 @@ The local stack uses the 563xx port range so it can run next to other local Supa
 The testing approach is described in the spec's "Testing Decisions":
 
 - **Unit tests** (`test/unit`, Vitest) exercise pure code through its public entry point. The domain core will hold most of them.
-- **End-to-end tests** (`test/e2e`, Playwright) drive a production build of the app, connected to the local Supabase stack, on a mobile viewport.
+- **End-to-end tests** (`test/e2e`, Playwright) drive a production build of the app, connected to the local Supabase stack, on a mobile viewport. A setup project ([`auth.setup.ts`](test/e2e/auth.setup.ts)) first signs the seeded traveller in through the sign-in screen, with the code read from the mail catcher. Every test then starts signed in as that traveller, unless it sets its own `storageState`.
 
 ```bash
 npm test
@@ -61,6 +63,14 @@ npm run test:e2e                 # needs the local stack and .env (see Getting s
 - Every traveller-owned row carries a `user_id` protected by row-level security; availability data is global ([ADR 0002](docs/adr/0002-multi-user-schema-shared-availability.md)).
 
 `GET /api/health` returns `{ "status": "ok", "database": "ok" }` when the server reaches Postgres through Supabase, and a 503 otherwise.
+
+## Sign-in
+
+- Travellers sign in with a 6-digit code sent by email (Supabase email OTP) and typed in the app. There are no magic links: from Mail, a link would open in Safari, whose storage is separate from the installed app. The email template is [`supabase/templates/sign-in-code.html`](supabase/templates/sign-in-code.html).
+- Sign-ups are closed (`enable_signup = false` in [`supabase/config.toml`](supabase/config.toml)), and the app asks for a code with `shouldCreateUser: false`. Requesting a code never creates a user. An unknown address gets a neutral refusal.
+- **To invite a traveller**, use the Supabase dashboard: Authentication → Users → Add user → Create new user, with « Auto Confirm User » ticked (the password is never used). « Send invitation » also works, but the traveller must open the invitation link once before asking for a code. Until then, Supabase refuses the address like an unknown one.
+- Every page except `/login` requires a signed-in traveller. A signed-out visit goes to `/login`, then back to the page it asked for.
+- The session lasts: the auth cookies are kept 400 days, the longest browsers allow, and Supabase refresh tokens do not expire. « Se déconnecter » in Réglages signs out this device only.
 
 ## Environment variables
 
@@ -84,7 +94,11 @@ npm run test:e2e                 # needs the local stack and .env (see Getting s
 
 One-time setup:
 
-1. **Supabase:** create the hosted project. Note its reference and database password, and create a personal access token.
+1. **Supabase:** create the hosted project. Note its reference and database password, and create a personal access token. Then mirror the local Auth settings of `supabase/config.toml` in the dashboard, since migrations do not carry them:
+   - Authentication → Sign In / Providers: turn « Allow new users to sign up » off and keep the Email provider on, with a 6-digit email OTP.
+   - Authentication → Emails → Templates → « Magic Link »: subject « Votre code Veille MAX », body copied from [`supabase/templates/sign-in-code.html`](supabase/templates/sign-in-code.html).
+   - Authentication → URL Configuration: the Site URL is the production URL.
+   - Authentication → Emails → SMTP Settings: Supabase's built-in email service only delivers to the organisation's team members, a few emails per hour. Set up a custom SMTP server before inviting anyone else.
 2. **GitHub:** add the `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` secrets and the `SUPABASE_PROJECT_ID` variable. The next push to `main` applies the migrations; you can also run the "Database migrations" workflow by hand.
 3. **Vercel:** import the GitHub repository. Vercel detects Nuxt and builds with the `vercel` Nitro preset on its own, on Node.js 24 (from `engines` in `package.json`). Add the three app variables to the Production and Preview environments.
 4. Check `https://<your-domain>/api/health`.
@@ -95,7 +109,7 @@ One-time setup:
 app/                 Nuxt app: pages, layouts, components, styles
 server/              Nitro server routes
 shared/              Code shared by the app and the server (the domain core will live here)
-supabase/            Supabase CLI config, migrations and seed
+supabase/            Supabase CLI config, migrations, seed and email templates
 test/unit/           Vitest tests
 test/e2e/            Playwright tests
 docs/                ADRs and research notes

@@ -14,3 +14,7 @@
 - [ ] Integration (seam 2, recording fake gateway): a test notification reaches every device of the traveller and only theirs; a gone subscription is deleted.
 - [ ] Playwright: the notification settings states render (permission mocked).
 - [ ] Manual iPhone checklist: install to the home screen, enable notifications, receive the test notification, tap opens the app.
+
+## Comments
+
+- 2026-10-16 — From ticket 02: check the session lifetime once the service worker is in. Safari caps cookies written from JavaScript to 7 days (ITP). Today the server rewrites the 400-day auth cookies when it refreshes the session during a page load. If the service worker serves page loads from its cache, that may stop happening, and the iPhone app could sign the traveller out after a week without opening it.
