@@ -51,14 +51,14 @@ export interface FixtureTrain {
 }
 
 /**
- * Records a snapshot taken now, listing `trains`, as the tick would ingest it:
- * it becomes the latest snapshot. Returns its id, for `removeSnapshot`.
+ * Records a snapshot taken at `takenAt` (now by default), listing `trains`, as
+ * the tick would ingest it: taken now, it becomes the latest snapshot. Returns
+ * its id, for `removeSnapshot`.
  */
-export async function recordSnapshot(trains: readonly FixtureTrain[]): Promise<number> {
-  const now = new Date().toISOString()
+export async function recordSnapshot(trains: readonly FixtureTrain[], takenAt = new Date()): Promise<number> {
   const { data, error } = await admin().rpc('record_snapshot', {
-    processed_at: now,
-    ingested_at: now,
+    processed_at: takenAt.toISOString(),
+    ingested_at: takenAt.toISOString(),
     trains: trains.map(train => ({
       date: train.date,
       train_number: train.trainNumber,
@@ -105,17 +105,23 @@ async function lockLatestSnapshot(): Promise<void> {
  * deletes it. No other test records a snapshot meanwhile.
  */
 export async function withLatestSnapshot(trains: readonly FixtureTrain[], body: () => Promise<void>): Promise<void> {
+  await withSnapshots([{ takenAt: new Date(), trains }], body)
+}
+
+/**
+ * Runs `body` once the snapshots of `history` are recorded, oldest first, then
+ * deletes them. No other test records a snapshot meanwhile: recording one
+ * closes the openings of every train it does not list.
+ */
+export async function withSnapshots(history: readonly { takenAt: Date, trains: readonly FixtureTrain[] }[], body: () => Promise<void>): Promise<void> {
   await lockLatestSnapshot()
+  const snapshotIds: number[] = []
   try {
-    const snapshotId = await recordSnapshot(trains)
-    try {
-      await body()
-    }
-    finally {
-      await removeSnapshot(snapshotId)
-    }
+    for (const { takenAt, trains } of history) snapshotIds.push(await recordSnapshot(trains, takenAt))
+    await body()
   }
   finally {
+    for (const snapshotId of snapshotIds) await removeSnapshot(snapshotId)
     await rm(LATEST_SNAPSHOT_LOCK, { recursive: true, force: true })
   }
 }

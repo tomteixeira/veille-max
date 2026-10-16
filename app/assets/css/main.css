@@ -47,6 +47,7 @@
   --color-on-accent: var(--vm-on-accent);
   --color-accent-soft: var(--vm-accent-soft);
   --color-accent-ink: var(--vm-accent-ink);
+  --color-on-ramp: var(--vm-on-ramp);
 
   --color-booked: var(--vm-booked);
   --color-on-booked: var(--vm-on-booked);
@@ -74,6 +75,8 @@
   --vm-on-accent: var(--color-white);
   --vm-accent-soft: var(--color-orange-50);
   --vm-accent-ink: var(--color-orange-600);
+  /* Text on the strong steps of a chart's orange ramp, dark in both themes for contrast. */
+  --vm-on-ramp: var(--color-stone-900);
 
   --vm-booked: var(--color-emerald-600);
   --vm-on-booked: var(--color-white);
@@ -102,6 +105,7 @@
     --vm-on-accent: var(--color-white);
     --vm-accent-soft: rgb(249 115 22 / 0.12);
     --vm-accent-ink: var(--color-orange-500);
+    --vm-on-ramp: var(--color-stone-950);
 
     --vm-booked: var(--color-emerald-500);
     --vm-on-booked: var(--color-white);

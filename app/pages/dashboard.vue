@@ -1,23 +1,55 @@
 <script setup lang="ts">
+import { MAX_ACTIVE_BOOKINGS } from '#shared/domain/evaluation'
+
 useHead({ title: 'Dashboard' })
 
-const MAX_JEUNE_BOOKING_LIMIT = 6
+/** The travel days counted: the trip template's weekdays by default, or every day. */
+const days = ref<'trip' | 'all'>('trip')
+const { data: dashboard } = await useFetch('/api/dashboard', { query: { days } })
 
-// Decorative silhouette of the release curve, shown until real history exists (ticket 14).
+const filters = computed(() => [
+  { value: 'trip', label: dashboard.value ? weekdaysLabel(dashboard.value.tripWeekdays) : 'Vos jours de voyage' },
+  { value: 'all', label: 'Tous les jours' },
+] as const)
+
+const emptyText = computed(() => emptyHistoryText(dashboard.value?.since ?? null, dashboard.value?.hasRoutes ?? false))
+const releaseTitle = computed(() => dashboard.value && releaseHeadline(dashboard.value.release.peaks))
+const slotTitle = computed(() => dashboard.value && slotHeadline(dashboard.value.slots.best, dashboard.value.slots.bands))
+const lifetimeTitle = computed(() => dashboard.value && lifetimeHeadline(dashboard.value.lifetimes))
+
+// Decorative silhouette of the release curve, shown until real history exists.
 const ghostBarHeights = [36, 52, 68, 44, 28, 24, 20, 24, 18, 16, 20, 28, 48, 60, 40, 24, 18, 16, 20, 24, 32, 44, 56, 36, 20]
 </script>
 
 <template>
   <div>
     <PageHeader
-      eyebrow="Vos routes · aucun instantané pour l’instant"
+      :eyebrow="dashboardScope(dashboard?.since ?? null)"
       title="Dashboard"
-    />
+    >
+      <div
+        class="mt-4 flex flex-wrap gap-2"
+        role="group"
+        aria-label="Jours de voyage"
+      >
+        <button
+          v-for="filter in filters"
+          :key="filter.value"
+          type="button"
+          class="h-9 rounded-full px-4 text-[13px] font-bold transition"
+          :class="days === filter.value ? 'bg-inverse text-on-inverse' : 'bg-surface text-ink-muted'"
+          :aria-pressed="days === filter.value"
+          @click="days = filter.value"
+        >
+          {{ filter.label }}
+        </button>
+      </div>
+    </PageHeader>
 
     <div class="mt-5 space-y-4 px-6">
       <SurfaceCard class="flex items-center gap-5">
         <p class="tnum text-[52px] leading-none font-extrabold tracking-tight">
-          0<span class="text-ink-faint">/{{ MAX_JEUNE_BOOKING_LIMIT }}</span>
+          0<span class="text-ink-faint">/{{ MAX_ACTIVE_BOOKINGS }}</span>
         </p>
         <div>
           <p class="text-sm font-bold">
@@ -28,37 +60,112 @@ const ghostBarHeights = [36, 52, 68, 44, 28, 24, 20, 24, 18, 16, 20, 28, 48, 60,
             aria-hidden="true"
           >
             <span
-              v-for="slot in MAX_JEUNE_BOOKING_LIMIT"
+              v-for="slot in MAX_ACTIVE_BOOKINGS"
               :key="slot"
               class="size-2.5 rounded-full bg-line"
             />
           </div>
           <p class="mt-2 text-xs font-medium text-ink-muted">
-            MAX JEUNE permet de garder {{ MAX_JEUNE_BOOKING_LIMIT }} trajets réservés à la fois.
+            MAX JEUNE permet de garder {{ MAX_ACTIVE_BOOKINGS }} trajets réservés à la fois.
           </p>
         </div>
       </SurfaceCard>
 
-      <SurfaceCard>
+      <SurfaceCard
+        as="section"
+        aria-labelledby="release-title"
+      >
         <p class="eyebrow">
           Sorties de places
         </p>
-        <h2 class="mt-1 text-[19px] leading-snug font-extrabold tracking-tight">
-          Vos premières tendances arrivent après quelques matins de veille.
+        <h2
+          id="release-title"
+          class="mt-1 text-[19px] leading-snug font-extrabold tracking-tight"
+        >
+          {{ releaseTitle ?? 'Vos premières tendances arrivent après quelques matins de veille.' }}
+        </h2>
+        <template v-if="dashboard && releaseTitle">
+          <div class="mt-5">
+            <ReleaseChart
+              :columns="dashboard.release.columns"
+              :peaks="dashboard.release.peaks"
+            />
+          </div>
+          <p class="mt-2 text-xs font-medium text-ink-muted">
+            {{ dashboard.release.total }} place{{ dashboard.release.total > 1 ? 's' : '' }} apparue{{ dashboard.release.total > 1 ? 's' : '' }}, selon le nombre de jours avant le départ. Touchez une barre.
+          </p>
+        </template>
+        <template v-else>
+          <div
+            class="mt-5 flex h-28 items-end gap-0.5"
+            aria-hidden="true"
+          >
+            <span
+              v-for="(height, index) in ghostBarHeights"
+              :key="index"
+              class="flex-1 rounded-t-[4px] bg-surface-muted"
+              :style="{ height: `${height}%` }"
+            />
+          </div>
+          <p class="mt-3 text-xs font-medium text-ink-muted">
+            {{ emptyText }}
+          </p>
+        </template>
+      </SurfaceCard>
+
+      <SurfaceCard
+        as="section"
+        aria-labelledby="slots-title"
+      >
+        <p class="eyebrow">
+          Créneaux
+        </p>
+        <h2
+          id="slots-title"
+          class="mt-1 text-[19px] leading-snug font-extrabold tracking-tight"
+        >
+          {{ slotTitle ?? 'Les meilleurs créneaux apparaîtront ici.' }}
         </h2>
         <div
-          class="mt-5 flex h-28 items-end gap-0.5"
-          aria-hidden="true"
+          v-if="dashboard && slotTitle"
+          class="mt-4"
         >
-          <span
-            v-for="(height, index) in ghostBarHeights"
-            :key="index"
-            class="flex-1 rounded-t-[4px] bg-surface-muted"
-            :style="{ height: `${height}%` }"
-          />
+          <SlotHeatmap :grid="dashboard.slots" />
         </div>
-        <p class="mt-3 text-xs font-medium text-ink-muted">
-          L’historique démarre au premier instantané lu par Veille MAX : sorties de places, meilleurs créneaux et durée de vie des places sur vos routes.
+        <p
+          v-else
+          class="mt-3 text-xs font-medium text-ink-muted"
+        >
+          {{ emptyText }}
+        </p>
+      </SurfaceCard>
+
+      <SurfaceCard
+        as="section"
+        aria-labelledby="lifetimes-title"
+      >
+        <p class="eyebrow">
+          Durée de vie
+        </p>
+        <h2
+          id="lifetimes-title"
+          class="mt-1 text-[19px] leading-snug font-extrabold tracking-tight"
+        >
+          {{ lifetimeTitle ?? 'Combien de temps une place reste, bientôt ici.' }}
+        </h2>
+        <template v-if="dashboard && lifetimeTitle">
+          <div class="mt-4">
+            <LifetimeBars :buckets="dashboard.lifetimes.buckets" />
+          </div>
+          <p class="mt-3 text-xs font-medium text-ink-muted">
+            Temps pendant lequel une place reste disponible avant d’être prise, sur {{ dashboard.lifetimes.total }} place{{ dashboard.lifetimes.total > 1 ? 's' : '' }}.
+          </p>
+        </template>
+        <p
+          v-else
+          class="mt-3 text-xs font-medium text-ink-muted"
+        >
+          {{ emptyText }}
         </p>
       </SurfaceCard>
     </div>
