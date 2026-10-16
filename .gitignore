@@ -20,6 +20,9 @@ blob-report/
 .env.*
 !.env.example
 
+# Vercel CLI project link
+.vercel/
+
 # Editors and OS
 .DS_Store
 .idea/
