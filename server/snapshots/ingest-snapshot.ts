@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Route } from '#shared/domain/trip-template'
-import { addDays, parisDate } from '#shared/utils/paris-time'
+import { addDays, parisDate, type ParisDate } from '#shared/utils/paris-time'
 import { loadLastSnapshot } from '#shared/utils/snapshot-store'
 import type { Database } from '#shared/types/database.types'
 import type { SnapshotSource } from './snapshot-source'
@@ -40,7 +40,8 @@ export async function ingestSnapshot({ db, source, now }: { db: SupabaseClient<D
   }
 
   const today = parisDate(now)
-  const trains = await source.trains(await trackedRoutes(db), { from: today, to: addDays(today, HORIZON_DAYS) })
+  const dates = { from: today, to: addDays(today, HORIZON_DAYS) }
+  const trains = await source.trains(await trackedRoutes(db, dates), dates)
 
   const { data, error } = await db.rpc('record_snapshot', {
     processed_at: processedAt.toISOString(),
@@ -74,8 +75,9 @@ export async function ingestSnapshot({ db, source, now }: { db: SupabaseClient<D
   }
 }
 
-async function trackedRoutes(db: SupabaseClient<Database>): Promise<Route[]> {
-  const { data, error } = await db.rpc('tracked_routes')
+/** Every traveller's template routes, and the routes of their customised legs dated within `dates`. */
+async function trackedRoutes(db: SupabaseClient<Database>, dates: { from: ParisDate, to: ParisDate }): Promise<Route[]> {
+  const { data, error } = await db.rpc('tracked_routes', { from_date: dates.from, to_date: dates.to })
   if (error) throw error
   return data.map(route => ({ originCode: route.origin_code, destinationCode: route.destination_code }))
 }

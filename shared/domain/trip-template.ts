@@ -43,13 +43,18 @@ export interface TimeWindow {
   end: LocalTime | null
 }
 
-export interface TemplateLeg {
-  weekday: Weekday
+/** How a leg ranks its candidates: its time window and ideal time, on one anchor, and its ranked routes. */
+export interface LegSettings {
   anchor: TimeAnchor
   window: TimeWindow
   idealTime: LocalTime
   /** Ranked: the first route has rank 1, the most preferred. */
   routes: readonly Route[]
+}
+
+/** A leg of the trip template: its settings, on a weekday of every trip. */
+export interface TemplateLeg extends LegSettings {
+  weekday: Weekday
 }
 
 export type TripTemplate = Record<LegKind, TemplateLeg>

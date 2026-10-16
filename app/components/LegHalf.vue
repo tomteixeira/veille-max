@@ -1,13 +1,16 @@
 <!--
-  One half of the « Billet modèle » in Réglages: a leg of the trip template,
-  drawn like a leg of the home ticket. Tapping anywhere on it opens its editor.
+  One half of the « Billet modèle » in Réglages, or of a trip's ticket on its
+  page: a leg's settings, drawn like a leg of the home ticket. Tapping anywhere
+  on it opens its editor, except on what the default slot adds at its bottom.
 -->
 <script setup lang="ts">
-import type { LegKind, TemplateLeg } from '#shared/domain/trip-template'
+import type { LegKind, LegSettings } from '#shared/domain/trip-template'
 
 const props = defineProps<{
   kind: LegKind
-  leg: TemplateLeg
+  /** When the leg runs: « Vendredi », « Jeudi 22 octobre ». */
+  day: string
+  leg: LegSettings
   stationName: (code: string) => string
   disabled?: boolean
 }>()
@@ -28,7 +31,7 @@ const headline = computed(() => windowHeadline(props.leg))
         :id="headingId"
         class="eyebrow"
       >
-        {{ LEG_NAMES[kind] }} · {{ WEEKDAY_NAMES[leg.weekday] }}
+        {{ LEG_NAMES[kind] }} · {{ day }}
       </h2>
       <!-- Stretched over the whole half, so that tapping anywhere on it opens the editor. -->
       <button
@@ -73,5 +76,13 @@ const headline = computed(() => windowHeadline(props.leg))
     >
       Aucune route pour l’instant
     </p>
+
+    <!-- Above the stretched « Modifier » button. -->
+    <div
+      v-if="$slots.default"
+      class="relative z-10 mt-4"
+    >
+      <slot />
+    </div>
   </section>
 </template>
