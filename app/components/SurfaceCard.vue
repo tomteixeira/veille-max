@@ -1,6 +1,6 @@
 <script setup lang="ts">
 withDefaults(defineProps<{
-  as?: 'article' | 'section' | 'div'
+  as?: 'article' | 'section' | 'div' | 'fieldset'
 }>(), {
   as: 'article',
 })
