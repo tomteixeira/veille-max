@@ -103,6 +103,20 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"notification_log": {
+                  Row: {
+                    "id": number,"kind": Database["public"]['Enums']["notification_kind"],"leg_kind": Database["public"]['Enums']["leg_kind"],"reminder_date": string | null,"sent_at": string,"trip_key": string,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "id"?: never,"kind": Database["public"]['Enums']["notification_kind"],"leg_kind": Database["public"]['Enums']["leg_kind"],"reminder_date"?: string | null,"sent_at"?: string,"trip_key": string,"user_id": string
+                  }
+                  Update: {
+                    "id"?: never,"kind"?: Database["public"]['Enums']["notification_kind"],"leg_kind"?: Database["public"]['Enums']["leg_kind"],"reminder_date"?: string | null,"sent_at"?: string,"trip_key"?: string,"user_id"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
                 },"openings": {
                   Row: {
                     "first_snapshot_id": number,"id": number,"is_open": boolean,"last_snapshot_id": number,"observation_id": number
@@ -263,14 +277,14 @@ isOneToOne: false
                   ]
                 },"traveller_settings": {
                   Row: {
-                    "route_weight": number,"user_id": string
+                    "confirmation_reminders": boolean,"route_weight": number | null,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "route_weight": number,"user_id"?: string
+                    "confirmation_reminders"?: boolean,"route_weight"?: number | null,"user_id"?: string
                   }
                   Update: {
-                    "route_weight"?: number,"user_id"?: string
+                    "confirmation_reminders"?: boolean,"route_weight"?: number | null,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -303,7 +317,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "leg_kind": "outbound"|"return","time_anchor": "departure"|"arrival"
+            "leg_kind": "outbound"|"return","notification_kind": "confirmation_reminder","time_anchor": "departure"|"arrival"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -423,7 +437,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "leg_kind": ["outbound", "return"],"time_anchor": ["departure", "arrival"]
+            "leg_kind": ["outbound", "return"],"notification_kind": ["confirmation_reminder"],"time_anchor": ["departure", "arrival"]
           }
         }
 } as const

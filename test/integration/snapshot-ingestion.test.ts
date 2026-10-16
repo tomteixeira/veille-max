@@ -56,7 +56,7 @@ describe('snapshot ingestion through the tick', () => {
     const fixture = fixtureSnapshotSource({ processedAt: friday.processedAt, trains: [] })
 
     // 23:30 UTC on Thursday is already Friday in Paris.
-    await runTick({ db: admin, source: fixture.source, now: new Date('2026-10-15T23:30:00Z') })
+    await runTick({ db: admin, source: fixture.source, gateway: null, now: new Date('2026-10-15T23:30:00Z') })
 
     const [{ routes, dates }] = fixture.exports as [typeof fixture.exports[number]]
     expect(dates).toEqual({ from: '2026-10-16', to: '2026-11-15' })
@@ -71,12 +71,13 @@ describe('snapshot ingestion through the tick', () => {
       trains: [morning6603(true), morning6605(false), evening6680(true), untrackedRoute, beyondHorizon],
     })
 
-    const summary = await runTick({ db: admin, source: fixture.source, now: friday.tick })
+    const summary = await runTick({ db: admin, source: fixture.source, gateway: null, now: friday.tick })
 
     expect(summary).toEqual({
       ingested: true,
       snapshotId: expect.any(Number),
       counts: { trains: 3, openTrains: 2, openingsOpened: 2, openingsKept: 0, openingsClosed: 0 },
+      reminders: 0,
     })
     const s1 = summary.snapshotId
     expect(await observations()).toEqual([
@@ -92,11 +93,11 @@ describe('snapshot ingestion through the tick', () => {
 
   it('keeps, opens and closes openings across successive snapshots', async () => {
     const fixture = fixtureSnapshotSource({ processedAt: friday.processedAt, trains: [morning6603(true), morning6605(false), evening6680(true)] })
-    const { snapshotId: s1 } = await runTick({ db: admin, source: fixture.source, now: friday.tick })
+    const { snapshotId: s1 } = await runTick({ db: admin, source: fixture.source, gateway: null, now: friday.tick })
 
     // Saturday: 6603 is still open, 6605 opens, 6680 is gone.
     fixture.publish({ processedAt: saturday.processedAt, trains: [morning6603(true), morning6605(true), evening6680(false)] })
-    const second = await runTick({ db: admin, source: fixture.source, now: saturday.tick })
+    const second = await runTick({ db: admin, source: fixture.source, gateway: null, now: saturday.tick })
 
     expect(second.counts).toEqual({ trains: 3, openTrains: 2, openingsOpened: 1, openingsKept: 1, openingsClosed: 1 })
     const s2 = second.snapshotId
@@ -113,7 +114,7 @@ describe('snapshot ingestion through the tick', () => {
 
     // Sunday: 6680 opens again, a new opening; 6603 leaves the snapshot, its opening closes.
     fixture.publish({ processedAt: sunday.processedAt, trains: [morning6605(true), evening6680(true)] })
-    const third = await runTick({ db: admin, source: fixture.source, now: sunday.tick })
+    const third = await runTick({ db: admin, source: fixture.source, gateway: null, now: sunday.tick })
 
     expect(third.counts).toEqual({ trains: 2, openTrains: 2, openingsOpened: 1, openingsKept: 1, openingsClosed: 1 })
     const s3 = third.snapshotId
@@ -127,14 +128,14 @@ describe('snapshot ingestion through the tick', () => {
 
   it('does nothing when SNCF still publishes the snapshot it last ingested', async () => {
     const fixture = fixtureSnapshotSource({ processedAt: friday.processedAt, trains: [morning6603(true), evening6680(true)] })
-    const first = await runTick({ db: admin, source: fixture.source, now: friday.tick })
+    const first = await runTick({ db: admin, source: fixture.source, gateway: null, now: friday.tick })
     const before = { observations: await observations(), openings: await openings() }
 
     // A later tick, the same morning: SNCF has not published a new snapshot.
     fixture.publish({ processedAt: friday.processedAt, trains: [morning6603(false), evening6680(false)] })
-    const again = await runTick({ db: admin, source: fixture.source, now: new Date('2026-10-16T04:45:00Z') })
+    const again = await runTick({ db: admin, source: fixture.source, gateway: null, now: new Date('2026-10-16T04:45:00Z') })
 
-    expect(again).toEqual({ ingested: false, snapshotId: first.snapshotId, counts: null })
+    expect(again).toEqual({ ingested: false, snapshotId: first.snapshotId, counts: null, reminders: 0 })
     expect(fixture.exports).toHaveLength(1)
     expect({ observations: await observations(), openings: await openings() }).toEqual(before)
     const { count } = await admin.from('snapshots').select('*', { count: 'exact', head: true })
@@ -145,9 +146,9 @@ describe('snapshot ingestion through the tick', () => {
     const fixture = fixtureSnapshotSource({ processedAt: friday.processedAt, trains: [morning6603(true)] })
     expect(await loadLastSnapshot(travellers[0]!.client)).toBeNull()
 
-    await runTick({ db: admin, source: fixture.source, now: friday.tick })
+    await runTick({ db: admin, source: fixture.source, gateway: null, now: friday.tick })
     fixture.publish({ processedAt: saturday.processedAt, trains: [morning6603(true)] })
-    await runTick({ db: admin, source: fixture.source, now: saturday.tick })
+    await runTick({ db: admin, source: fixture.source, gateway: null, now: saturday.tick })
 
     expect(await loadLastSnapshot(travellers[0]!.client)).toEqual({ id: expect.any(Number), processedAt: saturday.processedAt })
     for (const table of ['snapshots', 'train_observations', 'openings'] as const) {
@@ -193,7 +194,7 @@ describe('snapshot ingestion of customised trips', () => {
   it('collects the routes of the customised trips in the horizon, as well as the template routes', async () => {
     const fixture = fixtureSnapshotSource({ processedAt: friday.processedAt, trains: [] })
 
-    await runTick({ db: admin, source: fixture.source, now: friday.tick })
+    await runTick({ db: admin, source: fixture.source, gateway: null, now: friday.tick })
 
     const [{ routes }] = fixture.exports as [typeof fixture.exports[number]]
     expect(routes).toEqual(expect.arrayContaining([parisLyonToPartDieu, parisLyonToMarseille, marseilleToParisLyon]))
@@ -206,7 +207,7 @@ describe('snapshot ingestion of customised trips', () => {
       trains: [train('6177', parisLyonToMarseille, '2026-10-22', '19:07', '22:24', true)],
     })
 
-    const summary = await runTick({ db: admin, source: fixture.source, now: friday.tick })
+    const summary = await runTick({ db: admin, source: fixture.source, gateway: null, now: friday.tick })
 
     expect(summary.counts).toMatchObject({ trains: 1, openTrains: 1, openingsOpened: 1 })
     const { data } = await admin.from('train_observations').select('train_number, travel_date').eq('origin_code', 'FRPLY').eq('destination_code', 'FRMSC')

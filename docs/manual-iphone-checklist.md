@@ -28,3 +28,13 @@ Home-screen installation and real push delivery cannot be automated (spec, Testi
 ## Session lifetime (ticket 02)
 
 - [ ] Leave the installed app unopened for more than 7 days, then open it: the traveller is still signed in. The service worker never answers page loads ([ADR 0004](adr/0004-service-worker-without-fetch-handling.md)), so the server keeps rewriting the 400-day auth cookies.
+
+## Confirmation Reminder (ticket 11)
+
+Needs a booking for tomorrow on the iPhone's traveller, and Safari logged in to [MAX JEUNE](https://www.maxjeune-tgvinoui.sncf/sncf-connect/mes-voyages).
+
+- [ ] Réglages → Notifications: « Rappel de confirmation » is on.
+- [ ] At the first tick after noon Paris the day before, the reminder « Votre aller de demain est à confirmer » arrives once, naming the stations, the times and the 17:00 deadline. Later ticks send nothing more.
+- [ ] Tap it: the app opens on « Trajets à confirmer », listing tomorrow's booked legs.
+- [ ] Tap « Confirmer sur MAX JEUNE »: Safari opens on « Mes voyages », logged in. If the `x-safari-https://` link does nothing from the installed app, the page opens as plain https a moment later: write down what happened here, since that fallback opens it outside Safari's session.
+- [ ] Turn « Rappel de confirmation » off: the next day's reminder does not come.

@@ -2,21 +2,46 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Booking } from '../domain/evaluation'
 import type { LegKind } from '../domain/trip-template'
 import type { Database } from '../types/database.types'
+import type { ParisDate } from './paris-time'
 
 // Reads and writes a traveller's bookings (table `bookings`). With a
 // traveller's client, RLS limits every read and write to their own rows.
 
 type Client = SupabaseClient<Database>
 
+const BOOKING_COLUMNS = 'user_id, trip_key, leg_kind, travel_date, train_number, origin_code, destination_code, train_observations!inner (departure_time, arrival_time)'
+
 /** Every booking of `travellerId`, with the booked trains' latest times. */
 export async function loadBookings(client: Client, travellerId: string): Promise<Booking[]> {
-  const { data, error } = await client.from('bookings')
-    .select('trip_key, leg_kind, travel_date, train_number, origin_code, destination_code, train_observations!inner (departure_time, arrival_time)')
-    .eq('user_id', travellerId)
-    .order('travel_date')
+  const { data, error } = await client.from('bookings').select(BOOKING_COLUMNS).eq('user_id', travellerId).order('travel_date')
   if (error) throw error
+  return data.map(toBooking)
+}
 
-  return data.map(row => ({
+/** A traveller's booking. */
+export interface TravellerBooking extends Booking {
+  travellerId: string
+}
+
+/** Every booking of a train leaving on `date`, whoever holds it: for the server role. */
+export async function loadBookingsOn(client: Client, date: ParisDate): Promise<TravellerBooking[]> {
+  const { data, error } = await client.from('bookings').select(BOOKING_COLUMNS).eq('travel_date', date).order('user_id')
+  if (error) throw error
+  return data.map(row => ({ travellerId: row.user_id, ...toBooking(row) }))
+}
+
+type BookingRow = {
+  trip_key: string
+  leg_kind: LegKind
+  travel_date: string
+  train_number: string
+  origin_code: string
+  destination_code: string
+  train_observations: { departure_time: string, arrival_time: string }
+}
+
+function toBooking(row: BookingRow): Booking {
+  return {
     tripKey: row.trip_key,
     legKind: row.leg_kind,
     train: {
@@ -28,7 +53,7 @@ export async function loadBookings(client: Client, travellerId: string): Promise
       departureTime: row.train_observations.departure_time.slice(0, 5),
       arrivalTime: row.train_observations.arrival_time.slice(0, 5),
     },
-  }))
+  }
 }
 
 /**

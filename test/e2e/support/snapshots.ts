@@ -119,3 +119,18 @@ export async function withLatestSnapshot(trains: readonly FixtureTrain[], body: 
     await rm(LATEST_SNAPSHOT_LOCK, { recursive: true, force: true })
   }
 }
+
+/** Declares a traveller's booking straight in the database, without going through the leg view. The train must be one a snapshot listed. */
+export async function saveBooking(travellerId: string, booking: { tripKey: string, legKind: 'outbound' | 'return', train: FixtureTrain }): Promise<void> {
+  const { train } = booking
+  const { error } = await admin().from('bookings').insert({
+    user_id: travellerId,
+    trip_key: booking.tripKey,
+    leg_kind: booking.legKind,
+    travel_date: train.date,
+    train_number: train.trainNumber,
+    origin_code: train.originCode,
+    destination_code: train.destinationCode,
+  })
+  expect(error).toBeNull()
+}

@@ -54,3 +54,16 @@ export function formatParisSnapshotTime(instant: Date): string {
   const parts = Object.fromEntries(snapshotTimeFormat.formatToParts(instant).map(part => [part.type, part.value]))
   return `${parts.day} ${parts.month}, ${parts.hour}:${parts.minute}`
 }
+
+// `h23` writes midnight « 00 », where `en-GB` alone may write « 24 ».
+const timeOfDayFormat = new Intl.DateTimeFormat('en-GB', {
+  timeZone: PARIS_TIME_ZONE,
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+/** « 12:05 »: the Paris time of day of an instant. */
+export function parisTimeOfDay(instant: Date): string {
+  return timeOfDayFormat.format(instant)
+}
