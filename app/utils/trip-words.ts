@@ -1,10 +1,11 @@
-import type { Candidate, Leg, LegStatus, Trip } from '#shared/domain/evaluation'
+import type { Candidate, Leg, LegStatus, RankedBooking, Trip } from '#shared/domain/evaluation'
 import type { LegSettings } from '#shared/domain/trip-template'
 import type { ParisDate } from '#shared/utils/paris-time'
 import type { DayChoice } from './leg-words'
 
 /** The chip of a leg on its ticket half. */
 export const LEG_STATUS_NAMES: Record<LegStatus, string> = {
+  'booked': 'Réservé',
   'available': 'Disponible',
   'outside-window': 'Hors fenêtre',
   'none': 'Rien pour l’instant',
@@ -89,7 +90,7 @@ export function windowBanner({ anchor, window, idealTime }: LegSettings): { wind
  * Why a candidate ranks where it does: « Pile à l’heure idéale », « À 30 min
  * de l’heure idéale », « 1 h 00 hors fenêtre », « 25 min hors fenêtre + 2 rangs × 30 min ».
  */
-export function rankExplanation({ inWindow, minutesFromIdeal, minutesOutsideWindow, routeRank }: Candidate, routeWeight: number): string {
+export function rankExplanation({ inWindow, minutesFromIdeal, minutesOutsideWindow, routeRank }: Pick<Candidate, 'inWindow' | 'minutesFromIdeal' | 'minutesOutsideWindow' | 'routeRank'>, routeWeight: number): string {
   if (!inWindow) {
     const outside = `${durationText(minutesOutsideWindow)} hors fenêtre`
     const ranksBelow = routeRank - 1
@@ -98,4 +99,10 @@ export function rankExplanation({ inWindow, minutesFromIdeal, minutesOutsideWind
   }
   if (minutesFromIdeal === 0) return 'Pile à l’heure idéale'
   return `À ${durationText(minutesFromIdeal)} de l’heure idéale`
+}
+
+/** Where a booking stands against the candidates: « 2 trains font mieux », « Rien de mieux pour l’instant ». */
+export function bookingStanding({ candidatesAbove }: RankedBooking): string {
+  if (candidatesAbove === 0) return 'Rien de mieux pour l’instant'
+  return `${candidatesAbove} train${candidatesAbove > 1 ? 's' : ''} ${candidatesAbove > 1 ? 'font' : 'fait'} mieux`
 }

@@ -49,6 +49,7 @@
   --color-accent-ink: var(--vm-accent-ink);
 
   --color-booked: var(--vm-booked);
+  --color-on-booked: var(--vm-on-booked);
   --color-booked-soft: var(--vm-booked-soft);
   --color-booked-ink: var(--vm-booked-ink);
 }
@@ -75,6 +76,7 @@
   --vm-accent-ink: var(--color-orange-600);
 
   --vm-booked: var(--color-emerald-600);
+  --vm-on-booked: var(--color-white);
   --vm-booked-soft: var(--color-emerald-50);
   --vm-booked-ink: var(--color-emerald-700);
 }
@@ -102,6 +104,7 @@
     --vm-accent-ink: var(--color-orange-500);
 
     --vm-booked: var(--color-emerald-500);
+    --vm-on-booked: var(--color-white);
     --vm-booked-soft: rgb(16 185 129 / 0.12);
     --vm-booked-ink: var(--color-emerald-400);
   }

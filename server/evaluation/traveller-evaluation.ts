@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { evaluate, TRACKING_HORIZON_DAYS, type Leg, type Trip, type UpcomingTrip } from '#shared/domain/evaluation'
+import { loadBookings } from '#shared/utils/booking-store'
 import { loadOpenTrains } from '#shared/utils/observation-store'
 import { addDays, parisDate } from '#shared/utils/paris-time'
 import { loadLastSnapshot } from '#shared/utils/snapshot-store'
@@ -13,10 +14,12 @@ export interface TravellerEvaluation {
   routeWeight: number
   /** Whether the traveller's trip template, or one of their customised trips, ranks any route yet. */
   hasRoutes: boolean
-  /** The tracked trips, soonest first, each leg with its ranked candidates in the latest snapshot. */
+  /** The tracked trips, soonest first, each leg with its ranked candidates in the latest snapshot and its booking. */
   trips: Trip[]
   /** The next trips beyond the tracking horizon, « Bientôt ouverts ». */
   upcoming: UpcomingTrip[]
+  /** How many bookings the traveller holds for legs that have not passed. */
+  activeBookings: number
   /** The full name of every station the trips' routes and candidates use, by code. */
   stationNames: Record<string, string>
 }
@@ -27,11 +30,12 @@ export interface TravellerEvaluation {
  * is the traveller's own client, so RLS limits it to their rows.
  */
 export async function evaluateTraveller(client: SupabaseClient<Database>, travellerId: string, now: Date): Promise<TravellerEvaluation> {
-  const [template, routeWeight, customisations, mutes, snapshot] = await Promise.all([
+  const [template, routeWeight, customisations, mutes, bookings, snapshot] = await Promise.all([
     loadTripTemplate(client, travellerId),
     loadRouteWeight(client, travellerId),
     loadCustomisations(client, travellerId),
     loadMutes(client, travellerId),
+    loadBookings(client, travellerId),
     loadLastSnapshot(client),
   ])
   const templateRoutes = [...template.outbound.routes, ...template.return.routes]
@@ -41,20 +45,22 @@ export async function evaluateTraveller(client: SupabaseClient<Database>, travel
   const observations = snapshot
     ? await loadOpenTrains(client, snapshot.id, [...templateRoutes, ...customisedRoutes], { from: today, to: addDays(today, TRACKING_HORIZON_DAYS) })
     : []
-  const { trips, upcoming } = evaluate({ now, settings: { template, routeWeight, customisations, mutes }, observations })
+  const { trips, upcoming, activeBookings } = evaluate({ now, settings: { template, routeWeight, customisations, mutes, bookings }, observations })
 
   return {
     routeWeight,
     hasRoutes: templateRoutes.length > 0 || customisedRoutes.length > 0,
     trips,
     upcoming,
+    activeBookings,
     stationNames: await loadStationNames(client, [...trips, ...upcoming]),
   }
 }
 
-/** The code of every station a leg's routes and candidates use. */
+/** The code of every station a leg's routes, candidates and booking use. */
 export function legStationCodes(leg: Leg): string[] {
-  return [...leg.settings.routes, ...leg.candidates.map(({ train }) => train)].flatMap(route => [route.originCode, route.destinationCode])
+  const trains = [...leg.candidates.map(({ train }) => train), ...(leg.booking ? [leg.booking.train] : [])]
+  return [...leg.settings.routes, ...trains].flatMap(route => [route.originCode, route.destinationCode])
 }
 
 async function loadStationNames(client: SupabaseClient<Database>, trips: readonly Trip[]): Promise<Record<string, string>> {

@@ -33,6 +33,9 @@ export interface TripMute {
 /** The largest route weight a traveller can set. */
 export const MAX_ROUTE_WEIGHT = 120
 
+/** The most trips a MAX JEUNE subscriber can hold at once (spec, "MAX JEUNE rules"). */
+export const MAX_ACTIVE_BOOKINGS = 6
+
 export interface TravellerSettings {
   template: TripTemplate
   /** Minutes per route rank when ranking out-of-window candidates; `DEFAULT_ROUTE_WEIGHT` when not set. */
@@ -40,6 +43,8 @@ export interface TravellerSettings {
   /** The customised trips, by trip key. */
   customisations?: Readonly<Record<string, TripCustomisation>>
   mutes?: readonly TripMute[]
+  /** At most one per trip and leg. */
+  bookings?: readonly Booking[]
 }
 
 /** A train the latest snapshot lists on a route and date, with whether it has an open MAX JEUNE seat. */
@@ -50,6 +55,17 @@ export interface TrainObservation extends Route {
   departureTime: LocalTime
   arrivalTime: LocalTime
   open: boolean
+}
+
+/** A train as the traveller booked it, whether or not it still shows a seat. */
+export type BookedTrain = Omit<TrainObservation, 'open'>
+
+/** The train the traveller declared they reserved for a leg (CONTEXT.md, Booking). */
+export interface Booking {
+  /** The key of the booked leg's trip. */
+  tripKey: string
+  legKind: LegKind
+  train: BookedTrain
 }
 
 export interface EvaluationInput {
@@ -72,14 +88,24 @@ export interface Candidate {
   durationMinutes: number
 }
 
+/** A leg's booking, ranked with the same rules as its candidates. */
+export interface RankedBooking extends Omit<Candidate, 'train' | 'routeRank'> {
+  train: BookedTrain
+  /** The rank of the booked train's route among the leg's routes; `null` once the route is no longer among them. */
+  routeRank: number | null
+  /** How many of the leg's candidates rank strictly above the booking: the first ones of the ranking. */
+  candidatesAbove: number
+}
+
 /**
  * Where a leg stands:
+ * - `booked`: the traveller holds a booking for it;
  * - `available`: its best candidate is inside the time window;
  * - `outside-window`: it only has candidates outside the time window;
  * - `none`: it has no candidate;
  * - `past`: its date has passed, while its trip is still tracked.
  */
-export type LegStatus = 'available' | 'outside-window' | 'none' | 'past'
+export type LegStatus = 'booked' | 'available' | 'outside-window' | 'none' | 'past'
 
 export interface Leg {
   kind: LegKind
@@ -93,6 +119,7 @@ export interface Leg {
   candidates: Candidate[]
   /** The top-ranked candidate, `null` when the leg has none. */
   best: Candidate | null
+  booking: RankedBooking | null
 }
 
 export interface Trip {
@@ -116,6 +143,8 @@ export interface Evaluation {
   trips: Trip[]
   /** The next trips beyond the tracking horizon, soonest first. */
   upcoming: UpcomingTrip[]
+  /** How many bookings are held for legs that have not passed, against `MAX_ACTIVE_BOOKINGS`. */
+  activeBookings: number
 }
 
 export function evaluate({ now, settings, observations }: EvaluationInput): Evaluation {
@@ -125,6 +154,9 @@ export function evaluate({ now, settings, observations }: EvaluationInput): Eval
   const returnOffset = (template.return.weekday - template.outbound.weekday + 7) % 7
   const routeWeight = settings.routeWeight ?? DEFAULT_ROUTE_WEIGHT
   const isMuted = (tripKey: string, leg?: LegKind) => mutes.some(mute => mute.tripKey === tripKey && mute.leg === leg)
+  const bookings = settings.bookings ?? []
+  const bookingOf = (tripKey: string, kind: LegKind) =>
+    bookings.find(booking => booking.tripKey === tripKey && booking.legKind === kind)?.train ?? null
 
   const trips: Trip[] = []
   const upcoming: UpcomingTrip[] = []
@@ -143,7 +175,7 @@ export function evaluate({ now, settings, observations }: EvaluationInput): Eval
     if (lastDate < today) continue
 
     const muted = isMuted(key)
-    const evaluated = (kind: LegKind) => evaluateLeg(kind, legs[kind], muted || isMuted(key, kind), today, routeWeight, observations)
+    const evaluated = (kind: LegKind) => evaluateLeg(kind, legs[kind], muted || isMuted(key, kind), today, routeWeight, observations, bookingOf(key, kind))
     const trip: Trip = { key, customised: customisation !== undefined, muted, legs: { outbound: evaluated('outbound'), return: evaluated('return') } }
 
     // Tracked as soon as its first leg enters the horizon.
@@ -152,7 +184,8 @@ export function evaluate({ now, settings, observations }: EvaluationInput): Eval
   }
   // Customised dates can put a trip before the one of the previous week.
   const soonestFirst = (a: Trip, b: Trip) => firstLegDate(a).localeCompare(firstLegDate(b))
-  return { trips: trips.sort(soonestFirst), upcoming: upcoming.sort(soonestFirst) }
+  const activeBookings = bookings.filter(booking => booking.train.date >= today).length
+  return { trips: trips.sort(soonestFirst), upcoming: upcoming.sort(soonestFirst), activeBookings }
 }
 
 function firstLegDate({ legs }: Trip): ParisDate {
@@ -196,25 +229,72 @@ function legSettings({ anchor, window, idealTime, routes }: LegSettings): LegSet
   return { anchor, window, idealTime, routes }
 }
 
-function evaluateLeg(kind: LegKind, leg: CustomisedLeg, muted: boolean, today: ParisDate, routeWeight: number, observations: readonly TrainObservation[]): Leg {
+function evaluateLeg(
+  kind: LegKind,
+  leg: CustomisedLeg,
+  muted: boolean,
+  today: ParisDate,
+  routeWeight: number,
+  observations: readonly TrainObservation[],
+  bookedTrain: BookedTrain | null,
+): Leg {
   const { date } = leg
   const settings = legSettings(leg)
-  if (date < today) return { kind, date, settings, muted, status: 'past', candidates: [], best: null }
+  if (date < today) {
+    const booking = bookedTrain && rankedBooking(bookedTrain, date, settings, [], routeWeight)
+    return { kind, date, settings, muted, status: 'past', candidates: [], best: null, booking }
+  }
 
   const candidates: Candidate[] = []
   for (const train of observations) {
     if (!train.open || train.date !== date) continue
-    const routeIndex = settings.routes.findIndex(route => route.originCode === train.originCode && route.destinationCode === train.destinationCode)
-    if (routeIndex >= 0) candidates.push(rankedCandidate(train, routeIndex + 1, settings))
+    const routeRank = routeRankOf(train, settings)
+    if (routeRank !== null) candidates.push({ train, routeRank, ...timeRanking(train, settings) })
   }
   candidates.sort((a, b) => compareCandidates(a, b, routeWeight))
   const best = candidates[0] ?? null
-  const status = best === null ? 'none' : best.inWindow ? 'available' : 'outside-window'
-  return { kind, date, settings, muted, status, candidates, best }
+  const booking = bookedTrain && rankedBooking(bookedTrain, date, settings, candidates, routeWeight)
+
+  let status: LegStatus = best === null ? 'none' : best.inWindow ? 'available' : 'outside-window'
+  if (booking) status = 'booked'
+  return { kind, date, settings, muted, status, candidates, best, booking }
 }
 
-/** A candidate with what the ranking reads of it: its time against the leg's window and ideal time. */
-function rankedCandidate(train: TrainObservation, routeRank: number, { anchor, window, idealTime }: LegSettings): Candidate {
+/** Whether two routes join the same origin and destination stations. */
+export function sameRoute(a: Route, b: Route): boolean {
+  return a.originCode === b.originCode && a.destinationCode === b.destinationCode
+}
+
+/** Whether two trains are the same train, on the same route and date. */
+export function sameTrain(a: BookedTrain, b: BookedTrain): boolean {
+  return a.date === b.date && a.trainNumber === b.trainNumber && sameRoute(a, b)
+}
+
+/** The rank of a train's route among a leg's routes, `null` when it is not one of them. */
+export function routeRankOf(train: Route, { routes }: Pick<LegSettings, 'routes'>): number | null {
+  const index = routes.findIndex(route => sameRoute(route, train))
+  return index < 0 ? null : index + 1
+}
+
+/**
+ * A booking ranked as if it were a candidate (spec, "Ranking rules"): the
+ * candidates ranking strictly above it are the first ones of the ranking. A
+ * booking that could no longer be a candidate of the leg, its route no longer
+ * among the leg's routes or its train on another day, ranks below every candidate.
+ */
+function rankedBooking(train: BookedTrain, date: ParisDate, settings: LegSettings, candidates: readonly Candidate[], routeWeight: number): RankedBooking {
+  const routeRank = routeRankOf(train, settings)
+  const ranking = timeRanking(train, settings)
+  const candidatesAbove = routeRank === null || train.date !== date
+    ? candidates.length
+    : candidates.filter(candidate => compareCandidates(candidate, { routeRank, ...ranking, train }, routeWeight) < 0).length
+  return { train, routeRank, ...ranking, candidatesAbove }
+}
+
+/** What the ranking reads of a train's times: against the leg's window and ideal time. */
+type TimeRanking = Pick<Candidate, 'inWindow' | 'minutesOutsideWindow' | 'minutesFromIdeal' | 'durationMinutes'>
+
+function timeRanking(train: BookedTrain, { anchor, window, idealTime }: LegSettings): TimeRanking {
   const departure = minutes(train.departureTime)
   let arrival = minutes(train.arrivalTime)
   // An arrival earlier than the departure is on the next day.
@@ -228,8 +308,6 @@ function rankedCandidate(train: TrainObservation, routeRank: number, { anchor, w
   else if (end !== null && anchorTime > end) minutesOutsideWindow = anchorTime - end
 
   return {
-    train,
-    routeRank,
     inWindow: minutesOutsideWindow === 0,
     minutesOutsideWindow,
     minutesFromIdeal: Math.abs(anchorTime - minutes(idealTime)),
@@ -237,13 +315,16 @@ function rankedCandidate(train: TrainObservation, routeRank: number, { anchor, w
   }
 }
 
+/** A candidate, or a booking whose route is among the leg's routes. */
+type Ranked = Omit<Candidate, 'train'> & { train: BookedTrain }
+
 /**
  * The ranking (spec, "Ranking rules"): in-window candidates first, by route
  * rank, then closeness to the ideal time, then earlier departure; then
  * out-of-window candidates, by minutes outside the window plus the route
  * weight for each rank below 1, then route rank, then earlier departure.
  */
-function compareCandidates(a: Candidate, b: Candidate, routeWeight: number): number {
+function compareCandidates(a: Ranked, b: Ranked, routeWeight: number): number {
   if (a.inWindow !== b.inWindow) return a.inWindow ? -1 : 1
   const difference = a.inWindow
     ? compareKeys([a.routeRank, a.minutesFromIdeal], [b.routeRank, b.minutesFromIdeal])

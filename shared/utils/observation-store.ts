@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { TrainObservation } from '../domain/evaluation'
+import { sameRoute, type BookedTrain, type TrainObservation } from '../domain/evaluation'
 import type { Route } from '../domain/trip-template'
-import type { Database } from '../types/database.types'
+import type { Database, Tables } from '../types/database.types'
 import type { ParisDate } from './paris-time'
 
 // Reads the train observations (tables `train_observations` and `openings`),
@@ -42,15 +42,50 @@ export async function loadOpenTrains(
   }
 
   return rows
-    .filter(row => routes.some(route => route.originCode === row.origin_code && route.destinationCode === row.destination_code))
-    .map(row => ({
-      date: row.travel_date,
-      trainNumber: row.train_number,
-      originCode: row.origin_code,
-      destinationCode: row.destination_code,
-      // Postgres `time` reads « HH:MM:SS »; the domain uses « HH:MM ».
-      departureTime: row.departure_time.slice(0, 5),
-      arrivalTime: row.arrival_time.slice(0, 5),
-      open: true,
-    }))
+    .map(row => ({ ...trainObservation(row), open: true }))
+    .filter(train => routes.some(route => sameRoute(route, train)))
+}
+
+/**
+ * Every train snapshot `snapshotId` lists on `routes` on `date`, whether or
+ * not it has an open seat.
+ */
+export async function loadTrainsOfDay(
+  client: SupabaseClient<Database>,
+  snapshotId: number,
+  routes: readonly Route[],
+  date: ParisDate,
+): Promise<TrainObservation[]> {
+  if (routes.length === 0) return []
+
+  // An opening reaching the snapshot means an open seat. Narrowed to the
+  // routes' stations here, to the routes themselves below.
+  const { data, error } = await client.from('train_observations')
+    .select('travel_date, train_number, origin_code, destination_code, departure_time, arrival_time, openings (last_snapshot_id)')
+    .eq('last_snapshot_id', snapshotId)
+    .eq('openings.last_snapshot_id', snapshotId)
+    .eq('travel_date', date)
+    .in('origin_code', [...new Set(routes.map(route => route.originCode))])
+    .in('destination_code', [...new Set(routes.map(route => route.destinationCode))])
+    .order('departure_time')
+    .limit(PAGE_SIZE)
+  if (error) throw error
+
+  return data
+    .map(row => ({ ...trainObservation(row), open: row.openings.length > 0 }))
+    .filter(train => routes.some(route => sameRoute(route, train)))
+}
+
+type ObservationRow = Pick<Tables<'train_observations'>, 'travel_date' | 'train_number' | 'origin_code' | 'destination_code' | 'departure_time' | 'arrival_time'>
+
+function trainObservation(row: ObservationRow): BookedTrain {
+  return {
+    date: row.travel_date,
+    trainNumber: row.train_number,
+    originCode: row.origin_code,
+    destinationCode: row.destination_code,
+    // Postgres `time` reads « HH:MM:SS »; the domain uses « HH:MM ».
+    departureTime: row.departure_time.slice(0, 5),
+    arrivalTime: row.arrival_time.slice(0, 5),
+  }
 }
