@@ -23,7 +23,67 @@ export type Database = {
           }
         },"public": {
           Tables: {
-            [_ in never]: never
+            "stations": {
+                  Row: {
+                    "code": string,"name": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "code": string,"name": string
+                  }
+                  Update: {
+                    "code"?: string,"name"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"template_legs": {
+                  Row: {
+                    "anchor": Database["public"]['Enums']["time_anchor"],"ideal_time": string,"kind": Database["public"]['Enums']["leg_kind"],"user_id": string,"weekday": number,"window_end": string | null,"window_start": string | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "anchor": Database["public"]['Enums']["time_anchor"],"ideal_time": string,"kind": Database["public"]['Enums']["leg_kind"],"user_id"?: string,"weekday": number,"window_end"?: string | null,"window_start"?: string | null
+                  }
+                  Update: {
+                    "anchor"?: Database["public"]['Enums']["time_anchor"],"ideal_time"?: string,"kind"?: Database["public"]['Enums']["leg_kind"],"user_id"?: string,"weekday"?: number,"window_end"?: string | null,"window_start"?: string | null
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"template_routes": {
+                  Row: {
+                    "destination_code": string,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string,"rank": number,"user_id": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "destination_code": string,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string,"rank": number,"user_id"?: string
+                  }
+                  Update: {
+                    "destination_code"?: string,"leg_kind"?: Database["public"]['Enums']["leg_kind"],"origin_code"?: string,"rank"?: number,"user_id"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "template_routes_destination_code_fkey"
+      columns: ["destination_code"]
+isOneToOne: false
+      referencedRelation: "stations"
+      referencedColumns: ["code"]
+    },{
+      foreignKeyName: "template_routes_origin_code_fkey"
+      columns: ["origin_code"]
+isOneToOne: false
+      referencedRelation: "stations"
+      referencedColumns: ["code"]
+    },{
+      foreignKeyName: "template_routes_user_id_leg_kind_fkey"
+      columns: ["user_id","leg_kind"]
+isOneToOne: false
+      referencedRelation: "template_legs"
+      referencedColumns: ["user_id","kind"]
+    }
+                  ]
+                }
           }
           Views: {
             [_ in never]: never
@@ -31,10 +91,13 @@ export type Database = {
           Functions: {
             "health":
 { Args: Record<PropertyKey, never>; Returns: string
+                           },
+"save_template_leg":
+{ Args: { "anchor": Database["public"]['Enums']["time_anchor"],"ideal_time": string,"kind": Database["public"]['Enums']["leg_kind"],"routes": Json,"weekday": number,"window_end"?: string,"window_start"?: string }; Returns: undefined
                            }
           }
           Enums: {
-            [_ in never]: never
+            "leg_kind": "outbound"|"return","time_anchor": "departure"|"arrival"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -154,7 +217,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            
+            "leg_kind": ["outbound", "return"],"time_anchor": ["departure", "arrival"]
           }
         }
 } as const

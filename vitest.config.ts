@@ -9,7 +9,12 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['test/unit/**/*.test.ts'],
     environment: 'node',
+    projects: [
+      // Pure code, no I/O (`npm test`).
+      { extends: true, test: { name: 'unit', include: ['test/unit/**/*.test.ts'] } },
+      // Against the local Supabase stack, reached through `.env` (`npm run test:integration`).
+      { extends: true, test: { name: 'integration', include: ['test/integration/**/*.test.ts'], testTimeout: 15_000, hookTimeout: 30_000 } },
+    ],
   },
 })

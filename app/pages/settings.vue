@@ -1,12 +1,16 @@
 <script setup lang="ts">
+import type { LegKind } from '#shared/domain/trip-template'
+
 useHead({ title: 'Réglages' })
 
-// Defaults of a new traveller's trip template (ticket 03) and route weight (CONTEXT.md).
-const legs = [
-  { kind: 'Aller', weekday: 'Vendredi' },
-  { kind: 'Retour', weekday: 'Dimanche' },
-] as const
+// Default route weight (CONTEXT.md), until the traveller can change it.
 const DEFAULT_ROUTE_WEIGHT_MINUTES = 30
+
+const { template, stations, status, refresh, stationName, saveLeg } = await useTripTemplate()
+
+/** The leg whose editor is open in the bottom sheet. */
+const editing = ref<LegKind | null>(null)
+const editorTitleId = useId()
 
 const upcomingCards = [
   { title: 'Notifications', text: 'Nouveaux trains chaque matin et rappel de confirmation la veille, sur chacun de vos appareils.' },
@@ -39,33 +43,65 @@ async function signOut() {
       title="Votre week-end type"
     >
       <p class="mt-2 text-[13px] font-medium text-ink-muted">
-        Chaque week-end des 30 prochains jours partira de ce billet.
+        Chaque week-end des 30 prochains jours partira de ce billet. Touchez l’aller ou le retour pour le modifier.
       </p>
     </PageHeader>
 
-    <TicketCard class="mx-6 mt-5">
+    <TicketCard
+      v-if="template"
+      class="mx-6 mt-5"
+    >
       <template
-        v-for="(leg, index) in legs"
-        :key="leg.kind"
+        v-for="(kind, index) in LEG_KINDS"
+        :key="kind"
       >
         <TicketPerforation v-if="index > 0" />
-        <div class="px-5 pt-5 pb-4">
-          <div class="flex items-center justify-between">
-            <span class="eyebrow">{{ leg.kind }} · {{ leg.weekday }}</span>
-            <AppChip>À configurer</AppChip>
-          </div>
-          <p class="mt-3 text-[13px] font-bold text-ink-muted">
-            Fenêtre optimale
-          </p>
-          <p class="text-[26px] leading-9 font-extrabold tracking-tight text-ink-faint">
-            À définir
-          </p>
-          <p class="mt-3 text-[13px] font-medium text-ink-muted">
-            Aucune route pour l’instant
-          </p>
-        </div>
+        <TemplateLegHalf
+          :kind="kind"
+          :leg="template[kind]"
+          :station-name="stationName"
+          :disabled="!interactive"
+          @edit="editing = kind"
+        />
       </template>
     </TicketCard>
+    <SurfaceCard
+      v-else-if="status === 'error'"
+      class="mx-6 mt-5"
+    >
+      <p
+        role="alert"
+        class="text-[13px] leading-snug font-semibold text-accent-ink"
+      >
+        Impossible de charger votre week-end type pour l’instant.
+      </p>
+      <button
+        type="button"
+        :disabled="!interactive"
+        class="mt-3 h-11 w-full rounded-control bg-surface-muted text-[13px] font-bold transition-opacity hover:opacity-80 disabled:opacity-60"
+        @click="refresh()"
+      >
+        Réessayer
+      </button>
+    </SurfaceCard>
+
+    <BottomSheet
+      :open="editing !== null"
+      :labelledby="editorTitleId"
+      @close="editing = null"
+    >
+      <TemplateLegEditor
+        v-if="editing && template"
+        :key="editing"
+        :kind="editing"
+        :leg="template[editing]"
+        :stations="stations"
+        :station-name="stationName"
+        :title-id="editorTitleId"
+        :save="leg => saveLeg(editing!, leg)"
+        @close="editing = null"
+      />
+    </BottomSheet>
 
     <section
       class="mt-7 space-y-4 px-6"

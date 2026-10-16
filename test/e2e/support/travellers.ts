@@ -25,10 +25,36 @@ export async function signInThroughTheApp(page: Page, request: APIRequestContext
   await expect(page).toHaveURL('/')
 }
 
-/** Whether Supabase Auth holds an account for `address`, asked with the local stack's secret key. */
-export async function hasAccount(address: string): Promise<boolean> {
-  const admin = createClient(process.env.NUXT_PUBLIC_SUPABASE_URL!, process.env.NUXT_SUPABASE_SECRET_KEY!)
-  const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 })
+/** Supabase Auth's admin API, with the local stack's secret key. */
+function authAdmin() {
+  return createClient(process.env.NUXT_PUBLIC_SUPABASE_URL!, process.env.NUXT_SUPABASE_SECRET_KEY!).auth.admin
+}
+
+async function findAccount(address: string) {
+  const { data, error } = await authAdmin().listUsers({ perPage: 1000 })
   expect(error).toBeNull()
-  return data.users.some(user => user.email === address)
+  return data.users.find(user => user.email === address)
+}
+
+/** Whether Supabase Auth holds an account for `address`. */
+export async function hasAccount(address: string): Promise<boolean> {
+  return (await findAccount(address)) !== undefined
+}
+
+/**
+ * Invites a new traveller, as the README says to: an account with a confirmed
+ * email, so they can ask for a sign-in code. For tests that need a traveller of
+ * their own; remove them with `removeTraveller`.
+ */
+export async function inviteTraveller(address: string): Promise<void> {
+  const { error } = await authAdmin().createUser({ email: address, email_confirm: true })
+  expect(error).toBeNull()
+}
+
+/** Deletes the traveller's account, and with it every row they own. */
+export async function removeTraveller(address: string): Promise<void> {
+  const account = await findAccount(address)
+  if (!account) return
+  const { error } = await authAdmin().deleteUser(account.id)
+  expect(error).toBeNull()
 }
