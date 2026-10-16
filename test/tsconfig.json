@@ -1,0 +1,9 @@
+{
+  // Type-checks the tests and the test runners' configs, which no Nuxt-generated tsconfig covers.
+  "extends": "../.nuxt/tsconfig.shared.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts", "../vitest.config.ts", "../playwright.config.ts"],
+  "exclude": []
+}

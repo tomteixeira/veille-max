@@ -1,0 +1,1 @@
+{"root":["./e2e/smoke.spec.ts","./unit/paris-time.test.ts","../vitest.config.ts","../playwright.config.ts"],"version":"6.0.3"}
