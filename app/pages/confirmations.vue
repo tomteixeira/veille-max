@@ -30,10 +30,12 @@ function confirmOnMaxJeune(event: MouseEvent): void {
   if (!standalone) return
 
   event.preventDefault()
-  window.location.href = links.safari
-  setTimeout(() => {
+  // Once Safari has the page, the app goes to the background: no fallback when the traveller comes back.
+  const fallback = setTimeout(() => {
     if (document.visibilityState === 'visible') window.location.href = links.https
   }, 1500)
+  document.addEventListener('visibilitychange', () => clearTimeout(fallback), { once: true })
+  window.location.href = links.safari
 }
 </script>
 

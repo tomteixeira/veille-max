@@ -2,6 +2,7 @@ import { serverSupabaseClient, serverSupabaseUser } from '#supabase/server'
 import { bookingsToConfirm } from '#shared/domain/confirmation-reminder'
 import type { Booking } from '#shared/domain/evaluation'
 import { loadBookings } from '#shared/utils/booking-store'
+import { loadStationNames } from '#shared/utils/trip-template-store'
 import type { Database } from '#shared/types/database.types'
 
 /** « Trajets à confirmer »: the legs to confirm today, and the full name of their stations. */
@@ -18,10 +19,6 @@ export default defineEventHandler(async (event): Promise<ConfirmationList> => {
 
   const client = await serverSupabaseClient<Database>(event)
   const bookings = bookingsToConfirm(new Date(), await loadBookings(client, traveller.sub))
-  const codes = [...new Set(bookings.flatMap(({ train }) => [train.originCode, train.destinationCode]))]
-  if (codes.length === 0) return { bookings, stationNames: {} }
-
-  const { data, error } = await client.from('stations').select('code, name').in('code', codes)
-  if (error) throw error
-  return { bookings, stationNames: Object.fromEntries(data.map(station => [station.code, station.name])) }
+  const stationNames = await loadStationNames(client, bookings.flatMap(({ train }) => [train.originCode, train.destinationCode]))
+  return { bookings, stationNames }
 })

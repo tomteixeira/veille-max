@@ -5,6 +5,7 @@ import type { LegKind } from '#shared/domain/trip-template'
 import { loadBookingsOn, type TravellerBooking } from '#shared/utils/booking-store'
 import { addDays, parisDate } from '#shared/utils/paris-time'
 import { loadConfirmationReminders } from '#shared/utils/traveller-settings-store'
+import { loadStationNames } from '#shared/utils/trip-template-store'
 import type { Database } from '#shared/types/database.types'
 import type { PushMessage } from '#shared/types/push'
 import { notifyTraveller } from './notify-traveller'
@@ -24,19 +25,27 @@ export interface ConfirmationReminderDependencies {
  * Sends every Confirmation Reminder due at `now` that was not sent yet (spec,
  * "Tick endpoint"), muted trips included. Each one is logged before it is
  * sent, so that two ticks never both send it; when none of the traveller's
- * devices could be reached, the log entry is removed and the next tick tries
- * again. Returns how many reminders were sent.
+ * devices could be reached, or sending failed, the log entry is removed and
+ * the next tick tries again. Returns how many reminders were sent.
  */
 export async function sendConfirmationReminders({ db, gateway, now }: ConfirmationReminderDependencies): Promise<number> {
   const bookings = await loadBookingsOn(db, addDays(parisDate(now), 1))
+  const stationNames = await loadStationNames(db, bookings.flatMap(({ train }) => [train.originCode, train.destinationCode]))
   let sent = 0
   for (const [travellerId, theirs] of byTraveller(bookings)) {
     const due = dueConfirmationReminders(now, theirs, { enabled: await loadConfirmationReminders(db, travellerId) })
     for (const booking of due) {
       if (!await logReminder(db, travellerId, booking)) continue
-      const result = await notifyTraveller(db, gateway, travellerId, await reminderMessage(db, booking))
-      if (result.delivered === 0 && result.failed > 0) await unlogReminder(db, travellerId, booking)
-      else sent++
+      // One reminder that fails is tried again at the next tick, and does not hold back the others.
+      try {
+        const result = await notifyTraveller(db, gateway, travellerId, reminderMessage(booking, stationNames))
+        if (result.delivered === 0 && result.failed > 0) await unlogReminder(db, travellerId, booking)
+        else sent++
+      }
+      catch (error) {
+        console.error('Confirmation reminder failed', error)
+        await unlogReminder(db, travellerId, booking)
+      }
     }
   }
   return sent
@@ -72,20 +81,18 @@ async function unlogReminder(db: SupabaseClient<Database>, travellerId: string, 
   if (error) throw error
 }
 
-const LEG_NAMES: Record<LegKind, string> = { outbound: 'aller', return: 'retour' }
+/** A leg named inside a sentence: « Votre aller de demain ». */
+const LEG_NAMES_IN_SENTENCE: Record<LegKind, string> = { outbound: 'aller', return: 'retour' }
 
 /**
  * « Votre aller de demain est à confirmer — Paris Gare de Lyon → Lyon
  * Part-Dieu, 07:00 → 08:56. Confirmez-le sur MAX JEUNE avant 17:00, sinon SNCF
  * l’annule. » Tapping it opens « Trajets à confirmer ».
  */
-async function reminderMessage(db: SupabaseClient<Database>, { legKind, train }: Booking): Promise<PushMessage> {
-  const { data, error } = await db.from('stations').select('code, name').in('code', [train.originCode, train.destinationCode])
-  if (error) throw error
-  const name = (code: string) => data.find(station => station.code === code)?.name ?? code
-
+function reminderMessage({ legKind, train }: Booking, stationNames: Record<string, string>): PushMessage {
+  const name = (code: string) => stationNames[code] ?? code
   return {
-    title: `Votre ${LEG_NAMES[legKind]} de demain est à confirmer`,
+    title: `Votre ${LEG_NAMES_IN_SENTENCE[legKind]} de demain est à confirmer`,
     body: `${name(train.originCode)} → ${name(train.destinationCode)}, ${train.departureTime} → ${train.arrivalTime}. `
       + `Confirmez-le sur MAX JEUNE avant ${CONFIRMATION_DEADLINE}, sinon SNCF l’annule.`,
     url: '/confirmations',

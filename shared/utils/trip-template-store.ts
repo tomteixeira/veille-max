@@ -15,6 +15,16 @@ export async function loadStations(client: Client): Promise<Station[]> {
   return data
 }
 
+/** The full name of each station of `codes` the reference knows, by code. */
+export async function loadStationNames(client: Client, codes: Iterable<string>): Promise<Record<string, string>> {
+  const unique = [...new Set(codes)]
+  if (unique.length === 0) return {}
+
+  const { data, error } = await client.from('stations').select('code, name').in('code', unique)
+  if (error) throw error
+  return Object.fromEntries(data.map(station => [station.code, station.name]))
+}
+
 /** Postgres `time` reads « HH:MM:SS »; the domain uses « HH:MM ». */
 function hoursAndMinutes(time: string): string {
   return time.slice(0, 5)
