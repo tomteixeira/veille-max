@@ -1,6 +1,6 @@
 # Manual iPhone checklist
 
-Home-screen installation and real push delivery cannot be automated (spec, Testing Decisions). Run this on an iPhone with iOS 16.4 or later, against the production deployment, after changing the manifest, the service worker or push delivery. It needs the VAPID variables set on Vercel (README, Deploy, step 6).
+Home-screen installation, real push delivery and real Google sign-in cannot be automated (spec, Testing Decisions). Run this on an iPhone with iOS 16.4 or later, against the production deployment, after changing the manifest, the service worker, push delivery or sign-in. It needs the VAPID variables set on Vercel (README, Deploy, step 6).
 
 ## Install
 
@@ -38,3 +38,12 @@ Needs a booking for tomorrow on the iPhone's traveller, and Safari logged in to 
 - [ ] Tap it: the app opens on « Trajets à confirmer », listing tomorrow's booked legs.
 - [ ] Tap « Confirmer sur MAX JEUNE »: Safari opens on « Mes voyages », logged in. If the `x-safari-https://` link does nothing from the installed app, the page opens as plain https a moment later: write down what happened here, since that fallback opens it outside Safari's session.
 - [ ] Turn « Rappel de confirmation » off: the next day's reminder does not come.
+
+## Google sign-in (ticket 13)
+
+Needs Google sign-in set up on the hosted project (README, Sign-in), with a Google account whose address is an invited traveller's.
+
+- [ ] Sign out in Réglages. From the installed app, tap « Continuer avec Google »: Google opens in a sheet over the app, not in Safari, and offers to pick an account.
+- [ ] Pick the invited account: the sheet closes and the standalone app (no Safari address bar) opens on Accueil, signed in. Close and reopen the app: still signed in.
+- [ ] Sign out, then sign in with a Google account that is not invited: the app says « Ce compte Google n’a pas accès à Veille MAX », and « Retour à la connexion » leads back to sign-in.
+- [ ] If the sign-in ends in Safari, or the app says « La connexion avec Google n’a pas abouti » after picking the invited account: the redirect does not return to the installed app on this iOS version. Hide « Continuer avec Google » in standalone mode (`display-mode: standalone`) and record the iOS version and what happened in ticket 13.
