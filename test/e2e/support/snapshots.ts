@@ -145,8 +145,12 @@ export async function withSnapshots(history: readonly { takenAt: Date, trains: r
   }
 }
 
-/** Declares a traveller's booking straight in the database, without going through the leg view. The train must be one a snapshot listed. */
-export async function saveBooking(travellerId: string, booking: { tripKey: string, legKind: 'outbound' | 'return', train: FixtureTrain }): Promise<void> {
+/**
+ * Declares a traveller's booking straight in the database, without going
+ * through the leg view, at `bookedAt` (now by default). The train must be one
+ * a snapshot listed.
+ */
+export async function saveBooking(travellerId: string, booking: { tripKey: string, legKind: 'outbound' | 'return', train: FixtureTrain, bookedAt?: Date }): Promise<void> {
   const { train } = booking
   const { error } = await admin().from('bookings').insert({
     user_id: travellerId,
@@ -156,6 +160,7 @@ export async function saveBooking(travellerId: string, booking: { tripKey: strin
     train_number: train.trainNumber,
     origin_code: train.originCode,
     destination_code: train.destinationCode,
+    ...(booking.bookedAt && { booked_at: booking.bookedAt.toISOString() }),
   })
   expect(error).toBeNull()
 }

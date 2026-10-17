@@ -1,7 +1,9 @@
+import type { LegHistoryColumn } from '#shared/domain/leg-history'
 import type { HourBand, LifetimeBucket, LifetimeSpread, SlotGrid } from '#shared/domain/opening-history'
-import type { Weekday } from '#shared/domain/trip-template'
-import { PARIS_TIME_ZONE } from '#shared/utils/paris-time'
-import { WEEKDAY_NAMES } from './leg-words'
+import type { LegKind, Weekday } from '#shared/domain/trip-template'
+import { longDayName, PARIS_TIME_ZONE, type ParisDate } from '#shared/utils/paris-time'
+import { LEG_NAMES, WEEKDAY_NAMES } from './leg-words'
+import { shortDay } from './trip-words'
 
 // The dashboard's words: each card is titled with its one-sentence conclusion,
 // computed from the data (spec, UI module, « Histoires »).
@@ -79,4 +81,52 @@ export function emptyHistoryText(since: string | null, hasRoutes: boolean): stri
   if (!hasRoutes) return 'Ajoutez vos routes dans Réglages : leur historique démarrera au prochain instantané.'
   if (!since) return 'L’historique démarre au premier instantané lu par Veille MAX, chaque matin.'
   return `L’historique a démarré le ${longDate.format(new Date(since))}, au premier instantané lu par Veille MAX : les tendances arrivent après quelques matins de veille.`
+}
+
+/** « Vous réservez en moyenne à J-9. »: the bookings card's pace line. */
+export function bookingPaceText(averageDaysBefore: number | null): string {
+  if (averageDaysBefore === null) return 'Votre rythme de réservation apparaîtra après votre première réservation.'
+  if (averageDaysBefore === 0) return 'Vous réservez en moyenne le jour du départ.'
+  return `Vous réservez en moyenne à J-${averageDaysBefore}.`
+}
+
+// Calendar days are formatted at UTC midnight, where they never shift.
+const shortMonth = new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', month: 'short' })
+
+/** « Aller · Ven 23 oct. »: a leg, on its history chip. */
+export function historyLegLabel({ kind, date }: { kind: LegKind, date: ParisDate }): string {
+  return `${LEG_NAMES[kind]} · ${shortDay(date)} ${shortMonth.format(new Date(`${date}T00:00:00Z`))}`
+}
+
+/** « J-6 », « Départ »: how many days before departure a snapshot was taken. */
+export function daysBeforeLabel(daysBefore: number): string {
+  return daysBefore === 0 ? 'Départ' : `J-${daysBefore}`
+}
+
+/** « trajet réservé », « trajets réservés »: the bookings card's caption under its count. */
+export function bookedTripsText(count: number): string {
+  return count > 1 ? 'trajets réservés en ce moment' : 'trajet réservé en ce moment'
+}
+
+/** « aucun train », « 1 train », « 3 trains ». */
+export function trainsText(count: number): string {
+  if (count === 0) return 'aucun train'
+  return `${count} train${count > 1 ? 's' : ''}`
+}
+
+/**
+ * A leg history's conclusion: « Aller du vendredi 23 octobre : 3 trains au
+ * dernier instantané. » until the leg leaves, then its peak, « jusqu’à 5
+ * trains, à J-8. »; `null` without any snapshot.
+ */
+export function legHistoryHeadline({ kind, date, past, columns }: { kind: LegKind, date: ParisDate, past: boolean, columns: readonly LegHistoryColumn[] }): string | null {
+  const latest = columns.at(-1)
+  if (!latest) return null
+  const leg = `${LEG_NAMES[kind]} du ${longDayName(date).toLowerCase()}`
+  if (!past) return `${leg} : ${trainsText(latest.candidates)} au dernier instantané.`
+
+  // The first snapshot with the most candidates.
+  const peak = columns.reduce((best, column) => (column.candidates > best.candidates ? column : best))
+  if (peak.candidates === 0) return `${leg} : aucun train n’a eu de place.`
+  return `${leg} : jusqu’à ${trainsText(peak.candidates)}, à J-${peak.daysBefore}.`
 }

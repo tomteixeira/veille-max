@@ -6,9 +6,9 @@
 
 **Status:** ready-for-agent
 
-- [ ] A « Historique d'un trajet » card (in the "Histoires" layout) lets the traveller pick a trip leg (tracked or archived) with leg chips. It shows one column per snapshot (number of candidates) and gives the best candidate on tap, all under the leg's settings.
-- [ ] The first dashboard card shows the current active bookings count as a hero « x/6 », six dots and the average booking day (« Vous réservez en moyenne à J-9 »).
-- [ ] Past bookings show how many days before departure they were declared.
-- [ ] The history is derived from stored observations and Openings, with no extra collection.
-- [ ] Integration (seam 2): the leg history is correct for a known fixture sequence.
-- [ ] Playwright: pick a leg and see its history; the bookings counter matches the seeded bookings.
+- [x] A « Historique d'un trajet » card (in the "Histoires" layout) lets the traveller pick a trip leg (tracked or archived) with leg chips. It shows one column per snapshot (number of candidates) and gives the best candidate on tap, all under the leg's settings.
+- [x] The first dashboard card shows the current active bookings count as a hero « x/6 », six dots and the average booking day (« Vous réservez en moyenne à J-9 »).
+- [x] Past bookings show how many days before departure they were declared.
+- [x] The history is derived from stored observations and Openings, with no extra collection.
+- [x] Integration (seam 2): the leg history is correct for a known fixture sequence.
+- [x] Playwright: pick a leg and see its history; the bookings counter matches the seeded bookings.

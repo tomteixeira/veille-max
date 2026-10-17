@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, formatParisLongDay, formatParisSnapshotTime, parisDate, parisTimeOfDay } from '#shared/utils/paris-time'
+import { addDays, daysBetween, formatParisLongDay, formatParisSnapshotTime, parisDate, parisTimeOfDay } from '#shared/utils/paris-time'
 
 describe('formatParisLongDay', () => {
   it('writes the day in French with a capitalised weekday', () => {
@@ -23,6 +23,18 @@ describe('parisDate', () => {
     expect(parisDate(new Date('2026-10-16T08:00:00Z'))).toBe('2026-10-16')
     expect(parisDate(new Date('2026-10-15T22:30:00Z'))).toBe('2026-10-16')
     expect(parisDate(new Date('2026-11-05T22:30:00Z'))).toBe('2026-11-05')
+  })
+})
+
+describe('daysBetween', () => {
+  it('counts the calendar days from one day to another, negative backwards', () => {
+    expect(daysBetween('2026-10-16', '2026-11-15')).toBe(30)
+    expect(daysBetween('2026-12-20', '2027-01-19')).toBe(30)
+    expect(daysBetween('2026-10-23', '2026-10-16')).toBe(-7)
+  })
+
+  it('counts calendar days, not 24-hour periods, across the switch to winter time', () => {
+    expect(daysBetween('2026-10-24', '2026-10-26')).toBe(2)
   })
 })
 

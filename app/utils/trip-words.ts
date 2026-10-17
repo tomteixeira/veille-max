@@ -1,7 +1,7 @@
 import type { Candidate, Leg, LegStatus, RankedBooking, Trip } from '#shared/domain/evaluation'
 import type { LegSettings } from '#shared/domain/trip-template'
 import { longDayName, type ParisDate } from '#shared/utils/paris-time'
-import type { DayChoice } from './leg-words'
+import { ANCHOR_WORDS, type DayChoice } from './leg-words'
 
 /** The chip of a leg on its ticket half. */
 export const LEG_STATUS_NAMES: Record<LegStatus, string> = {

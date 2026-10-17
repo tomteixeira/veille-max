@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { defaultTripTemplate, type Route } from '#shared/domain/trip-template'
+import { saveBooking } from '#shared/utils/booking-store'
 import { saveTemplateLeg } from '#shared/utils/trip-template-store'
 import type { SnapshotTrain } from '../../server/snapshots/snapshot-source'
-import { loadDashboard } from '../../server/dashboard/dashboard-view'
+import { loadDashboard, loadLegHistory } from '../../server/dashboard/dashboard-view'
 import { runTick } from '../../server/tick/run-tick'
 import { clearSnapshots, fixtureSnapshotSource } from './support/snapshots'
 import { admin, removeTraveller, signedInTraveller, type Traveller } from './support/travellers'
@@ -15,6 +16,10 @@ const montparnasseToBordeaux: Route = { originCode: 'FRPMO', destinationCode: 'F
 const FRIDAY = 5
 const SATURDAY = 6
 const SUNDAY = 7
+
+// Wednesday 21 October 2026, after the five mornings; Tuesday 27, once the weekend of the 23rd has passed.
+const wednesday = new Date('2026-10-21T10:00:00Z')
+const nextTuesday = new Date('2026-10-27T10:00:00Z')
 
 function train(trainNumber: string, route: Route, date: string, departureTime: string, open: boolean): SnapshotTrain {
   return { date, trainNumber, ...route, departureTime, arrivalTime: '23:00', open }
@@ -78,7 +83,7 @@ describe('dashboard: when seats come out', () => {
   })
 
   it('dates the history from the first ingested snapshot, and filters on the trip weekdays by default', async () => {
-    const dashboard = await loadDashboard(traveller.client, traveller.id, 'trip')
+    const dashboard = await loadDashboard(traveller.client, traveller.id, 'trip', wednesday)
 
     expect(dashboard.since).toBe('2026-10-16T04:24:00.000Z')
     expect(dashboard.tripWeekdays).toEqual([FRIDAY, SUNDAY])
@@ -86,8 +91,8 @@ describe('dashboard: when seats come out', () => {
   })
 
   it('counts the openings whose start is known by the day before departure they came out, on the traveller’s routes', async () => {
-    const trip = await loadDashboard(traveller.client, traveller.id, 'trip')
-    const all = await loadDashboard(traveller.client, traveller.id, 'all')
+    const trip = await loadDashboard(traveller.client, traveller.id, 'trip', wednesday)
+    const all = await loadDashboard(traveller.client, traveller.id, 'all', wednesday)
 
     const counted = (columns: typeof trip.curve.columns) => columns.filter(column => column.openings > 0)
     expect(counted(trip.curve.columns)).toEqual([{ daysBefore: 30, openings: 1 }, { daysBefore: 7, openings: 1 }, { daysBefore: 6, openings: 1 }])
@@ -96,8 +101,8 @@ describe('dashboard: when seats come out', () => {
   })
 
   it('gives the share of train-mornings with an open seat per weekday and departure-hour band', async () => {
-    const trip = await loadDashboard(traveller.client, traveller.id, 'trip')
-    const all = await loadDashboard(traveller.client, traveller.id, 'all')
+    const trip = await loadDashboard(traveller.client, traveller.id, 'trip', wednesday)
+    const all = await loadDashboard(traveller.client, traveller.id, 'all', wednesday)
 
     // Friday 07:00: open 2 mornings out of 5; Friday 18:00: 2 out of 5.
     // Sunday 10:00: 1 out of 5; Sunday 17:04: 2 out of 4; Sunday 21:00: 1 out of 3.
@@ -111,17 +116,82 @@ describe('dashboard: when seats come out', () => {
   })
 
   it('spreads the seats seen taken by how long they lasted', async () => {
-    const trip = await loadDashboard(traveller.client, traveller.id, 'trip')
-    const all = await loadDashboard(traveller.client, traveller.id, 'all')
+    const trip = await loadDashboard(traveller.client, traveller.id, 'trip', wednesday)
+    const all = await loadDashboard(traveller.client, traveller.id, 'all', wednesday)
 
     expect(trip.lifetimes.buckets.map(bucket => bucket.openings)).toEqual([1, 1, 0, 0, 0])
     expect(all.lifetimes.buckets.map(bucket => bucket.openings)).toEqual([2, 1, 0, 0, 0])
   })
 
+  describe('leg history', () => {
+    it('lists the legs of the tracked trips and of the trips archived since the first snapshot', async () => {
+      const { legs } = await loadDashboard(traveller.client, traveller.id, 'trip', nextTuesday)
+
+      expect(legs.slice(0, 5)).toEqual([
+        { tripKey: '2026-W42', kind: 'outbound', date: '2026-10-16', past: true },
+        { tripKey: '2026-W42', kind: 'return', date: '2026-10-18', past: true },
+        { tripKey: '2026-W43', kind: 'outbound', date: '2026-10-23', past: true },
+        { tripKey: '2026-W43', kind: 'return', date: '2026-10-25', past: true },
+        { tripKey: '2026-W44', kind: 'outbound', date: '2026-10-30', past: false },
+      ])
+    })
+
+    it('gives the number of candidates and the best one in every snapshot of the leg’s booking window', async () => {
+      const history = await loadLegHistory(traveller.client, traveller.id, wednesday, '2026-W43', 'outbound')
+
+      // Both Friday trains arrive at 23:00, out of the window: the earlier one ranks first.
+      expect(history?.columns.map(({ day, daysBefore, candidates, best }) => [day, daysBefore, candidates, best?.train.trainNumber ?? null])).toEqual([
+        ['2026-10-16', 7, 1, '6603'],
+        ['2026-10-17', 6, 2, '6603'],
+        ['2026-10-18', 5, 1, '6641'],
+        ['2026-10-19', 4, 0, null],
+        ['2026-10-20', 3, 0, null],
+      ])
+      expect(history).toMatchObject({ tripKey: '2026-W43', kind: 'outbound', date: '2026-10-23', past: false, settings: { routes: [parisLyonToPartDieu] } })
+      expect(history?.stationNames).toMatchObject({ FRPLY: expect.any(String), FRLPD: expect.any(String) })
+    })
+
+    it('keeps the history of a leg once its trip is archived', async () => {
+      const history = await loadLegHistory(traveller.client, traveller.id, nextTuesday, '2026-W43', 'return')
+
+      // The Sunday seats: 6680 from the 18th to the 19th, 6690 (later, further from 17:00) on the 18th.
+      expect(history?.past).toBe(true)
+      expect(history?.columns.map(({ candidates, best }) => [candidates, best?.train.trainNumber ?? null])).toEqual([
+        [0, null],
+        [0, null],
+        [2, '6680'],
+        [1, '6680'],
+        [0, null],
+      ])
+    })
+
+    it('is not found for a trip outside the history', async () => {
+      expect(await loadLegHistory(traveller.client, traveller.id, wednesday, '2026-W30', 'outbound')).toBeNull()
+    })
+  })
+
+  it('counts the bookings held against the limit, and how long before departure they were declared', async () => {
+    await saveBooking(traveller.client, traveller.id, { tripKey: '2026-W43', legKind: 'outbound', train: fridayEvening(true) })
+    await saveBooking(traveller.client, traveller.id, { tripKey: '2026-W43', legKind: 'return', train: sundayEvening(true) })
+    await saveBooking(traveller.client, traveller.id, { tripKey: '2026-W46', legKind: 'return', train: horizonSunday(true) })
+    // Declared on Saturday 17 (D-6), Sunday 18 (D-7) and Friday 16 (D-30).
+    for (const [legKind, tripKey, bookedAt] of [['outbound', '2026-W43', '2026-10-17T08:00:00Z'], ['return', '2026-W43', '2026-10-18T08:00:00Z'], ['return', '2026-W46', '2026-10-16T08:00:00Z']] as const) {
+      const { error } = await admin.from('bookings').update({ booked_at: bookedAt }).eq('user_id', traveller.id).eq('trip_key', tripKey).eq('leg_kind', legKind)
+      expect(error).toBeNull()
+    }
+
+    const { bookings } = await loadDashboard(traveller.client, traveller.id, 'trip', nextTuesday)
+
+    expect(bookings.active).toBe(1)
+    // (6 + 7 + 30) / 3.
+    expect(bookings.averageDaysBefore).toBe(14)
+    expect(bookings.past.map(({ tripKey, legKind, daysBefore }) => [tripKey, legKind, daysBefore])).toEqual([['2026-W43', 'return', 7], ['2026-W43', 'outbound', 6]])
+  })
+
   it('is empty, without a start date, before the first snapshot', async () => {
     await clearSnapshots()
 
-    const dashboard = await loadDashboard(traveller.client, traveller.id, 'trip')
+    const dashboard = await loadDashboard(traveller.client, traveller.id, 'trip', wednesday)
 
     expect(dashboard.since).toBeNull()
     expect(dashboard.curve.total).toBe(0)

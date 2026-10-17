@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sameRoute, type BookedTrain, type TrainObservation } from '../domain/evaluation'
+import type { ObservedTrain } from '../domain/leg-history'
 import type { Route } from '../domain/trip-template'
 import type { Database, Tables } from '../types/database.types'
 import type { ParisDate } from './paris-time'
@@ -73,6 +74,31 @@ export async function loadTrainsOfDay(
 
   return data
     .map(row => ({ ...bookedTrainFromRow(row), open: row.openings.length > 0 }))
+    .filter(train => routes.some(route => sameRoute(route, train)))
+}
+
+/**
+ * Every train the snapshots listed on `routes` on `date`, with the runs of
+ * snapshots in which it had an open seat.
+ */
+export async function loadObservedTrains(client: SupabaseClient<Database>, routes: readonly Route[], date: ParisDate): Promise<ObservedTrain[]> {
+  if (routes.length === 0) return []
+
+  // Narrowed to the routes' stations here, to the routes themselves below.
+  const { data, error } = await client.from('train_observations')
+    .select('travel_date, train_number, origin_code, destination_code, departure_time, arrival_time, openings (first_snapshot_id, last_snapshot_id)')
+    .eq('travel_date', date)
+    .in('origin_code', [...new Set(routes.map(route => route.originCode))])
+    .in('destination_code', [...new Set(routes.map(route => route.destinationCode))])
+    .order('departure_time')
+    .limit(PAGE_SIZE)
+  if (error) throw error
+
+  return data
+    .map(row => ({
+      ...bookedTrainFromRow(row),
+      openings: row.openings.map(opening => ({ firstSnapshotId: opening.first_snapshot_id, lastSnapshotId: opening.last_snapshot_id })),
+    }))
     .filter(train => routes.some(route => sameRoute(route, train)))
 }
 

@@ -27,6 +27,11 @@ function train(trainNumber: string, route: Route, date: string, departureTime: s
   return { date, trainNumber, ...route, departureTime, arrivalTime, open }
 }
 
+/** The booking of `trainObservation` on a leg; the booked train may show no seat any more. */
+function booking(tripKey: string, legKind: 'outbound' | 'return', { open: _open, ...bookedTrain }: TrainObservation): Booking {
+  return { tripKey, legKind, train: bookedTrain }
+}
+
 /** The train numbers of a leg's candidates, in ranking order. */
 function ranking(evaluation: ReturnType<typeof evaluate>, tripKey: string, leg: 'outbound' | 'return' = 'outbound') {
   const trip = evaluation.trips.find(trip => trip.key === tripKey)
@@ -104,6 +109,56 @@ describe('evaluation', () => {
 
       // Thursday 15 October's trip is still tracked: its return is on Monday 19.
       expect(trips[0]).toMatchObject({ key: '2026-W42', legs: { outbound: { date: '2026-10-15' }, return: { date: '2026-10-19' } } })
+    })
+  })
+
+  describe('archived trips', () => {
+    // Wednesday 28 October 2026.
+    const wednesday = new Date('2026-10-28T10:00:00Z')
+
+    it('are none unless asked for', () => {
+      const { archived } = evaluate({ now: wednesday, settings: settings(), observations: [] })
+
+      expect(archived).toEqual([])
+    })
+
+    it('are the trips whose legs have all passed, since a given day, soonest first', () => {
+      const { trips, archived } = evaluate({ now: wednesday, settings: settings(), observations: [], archivedSince: '2026-10-01' })
+
+      expect(archived.map(trip => [trip.key, trip.legs.outbound.date, trip.legs.return.date])).toEqual([
+        ['2026-W40', '2026-10-02', '2026-10-04'],
+        ['2026-W41', '2026-10-09', '2026-10-11'],
+        ['2026-W42', '2026-10-16', '2026-10-18'],
+        ['2026-W43', '2026-10-23', '2026-10-25'],
+      ])
+      expect(trips[0]?.key).toBe('2026-W44')
+    })
+
+    it('keep a trip one of whose legs is on or after that day', () => {
+      const { archived } = evaluate({ now: wednesday, settings: settings(), observations: [], archivedSince: '2026-10-17' })
+
+      expect(archived.map(trip => trip.key)).toEqual(['2026-W42', '2026-W43'])
+    })
+
+    it('keep their customised settings, and their legs are past, with their booking but no candidate', () => {
+      const booked = settings({ bookings: [booking('2026-W43', 'outbound', train('6611', parisLyonToPerrache, '2026-10-22', '07:10', '09:06'))] })
+      // Thursday 22 out, on Perrache only; Sunday 25 back.
+      const thursday = { ...booked.template.outbound, date: '2026-10-22', routes: [parisLyonToPerrache] }
+      const withCustomisation = { ...booked, customisations: { '2026-W43': { outbound: thursday, return: { ...booked.template.return, date: '2026-10-25' } } } }
+
+      const { archived } = evaluate({ now: wednesday, settings: withCustomisation, observations: [], archivedSince: '2026-10-20' })
+
+      expect(archived).toHaveLength(1)
+      expect(archived[0]).toMatchObject({ key: '2026-W43', customised: true })
+      expect(archived[0]?.legs.outbound).toMatchObject({ date: '2026-10-22', status: 'past', candidates: [], best: null, settings: { routes: [parisLyonToPerrache] } })
+      expect(archived[0]?.legs.outbound.booking?.train.trainNumber).toBe('6611')
+    })
+
+    it('are neither given references nor notified', () => {
+      const evaluation = evaluate({ now: wednesday, settings: settings(), observations: [], archivedSince: '2026-10-01' })
+
+      expect(evaluation.references.map(reference => reference.tripKey)).not.toContain('2026-W43')
+      expect(evaluation.improvements).toEqual([])
     })
   })
 
@@ -298,11 +353,6 @@ describe('evaluation', () => {
   })
 
   describe('bookings', () => {
-    /** The booking of `trainObservation` on a leg; the booked train may show no seat any more. */
-    function booking(tripKey: string, legKind: 'outbound' | 'return', { open: _open, ...bookedTrain }: TrainObservation): Booking {
-      return { tripKey, legKind, train: bookedTrain }
-    }
-
     it('show on their leg, ranked with the same rules as candidates', () => {
       // Route 2 booked, leaving at 07:10; route 1 leaving at 06:05 then appears: it ranks above the booking.
       const booked = train('6611', parisLyonToPerrache, '2026-10-23', '07:10', '09:06', false)
