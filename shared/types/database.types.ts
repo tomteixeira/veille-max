@@ -324,6 +324,9 @@ isOneToOne: false
             "health":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"opening_history":
+{ Args: { "routes": Json }; Returns: Json
+                           },
 "record_snapshot":
 { Args: { "ingested_at": string,"processed_at": string,"trains": Json }; Returns: Json
                            },
