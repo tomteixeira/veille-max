@@ -1,8 +1,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { seatReleaseDashboard, type SeatReleaseDashboard } from '#shared/domain/seat-release'
+import { openingDashboard, type OpeningDashboard } from '#shared/domain/opening-history'
 import { sameRoute } from '#shared/domain/evaluation'
 import { LEG_KINDS, type Route, type Weekday } from '#shared/domain/trip-template'
-import { loadSeatReleaseHistory } from '#shared/utils/seat-release-store'
+import { loadOpeningHistory } from '#shared/utils/opening-history-store'
 import { loadTripTemplate } from '#shared/utils/trip-template-store'
 import type { Database } from '#shared/types/database.types'
 
@@ -14,7 +14,7 @@ export function isDashboardFilter(value: unknown): value is DashboardFilter {
 }
 
 /** What the dashboard shows (spec, "Evaluation read API"): when seats come out on the traveller's routes. */
-export interface DashboardView extends SeatReleaseDashboard {
+export interface DashboardView extends OpeningDashboard {
   /** When SNCF took the first ingested snapshot, as an ISO instant: the start of the history, `null` before it. */
   since: string | null
   /** The weekdays of the traveller's trip template, outbound first, without duplicates. */
@@ -35,9 +35,9 @@ export async function loadDashboard(client: SupabaseClient<Database>, travellerI
   }
   const tripWeekdays = [...new Set(LEG_KINDS.map(kind => template[kind].weekday))]
 
-  const { firstSnapshotAt, history } = await loadSeatReleaseHistory(client, routes)
+  const { firstSnapshotAt, history } = await loadOpeningHistory(client, routes)
   return {
-    ...seatReleaseDashboard(history, filter === 'trip' ? tripWeekdays : 'all'),
+    ...openingDashboard(history, filter === 'trip' ? tripWeekdays : 'all'),
     since: firstSnapshotAt?.toISOString() ?? null,
     tripWeekdays,
     filter,

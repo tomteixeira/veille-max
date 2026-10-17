@@ -13,11 +13,11 @@ const filters = computed(() => [
 ] as const)
 
 const emptyText = computed(() => emptyHistoryText(dashboard.value?.since ?? null, dashboard.value?.hasRoutes ?? false))
-const releaseTitle = computed(() => dashboard.value && releaseHeadline(dashboard.value.release.peaks))
-const slotTitle = computed(() => dashboard.value && slotHeadline(dashboard.value.slots.best, dashboard.value.slots.bands))
+const curveTitle = computed(() => dashboard.value && curveHeadline(dashboard.value.curve.peaks))
+const slotTitle = computed(() => dashboard.value && slotHeadline(dashboard.value.slots))
 const lifetimeTitle = computed(() => dashboard.value && lifetimeHeadline(dashboard.value.lifetimes))
 
-// Decorative silhouette of the release curve, shown until real history exists.
+// Decorative silhouette of the opening curve, shown until real history exists.
 const ghostBarHeights = [36, 52, 68, 44, 28, 24, 20, 24, 18, 16, 20, 28, 48, 60, 40, 24, 18, 16, 20, 24, 32, 44, 56, 36, 20]
 </script>
 
@@ -73,26 +73,26 @@ const ghostBarHeights = [36, 52, 68, 44, 28, 24, 20, 24, 18, 16, 20, 28, 48, 60,
 
       <SurfaceCard
         as="section"
-        aria-labelledby="release-title"
+        aria-labelledby="curve-title"
       >
         <p class="eyebrow">
           Sorties de places
         </p>
         <h2
-          id="release-title"
+          id="curve-title"
           class="mt-1 text-[19px] leading-snug font-extrabold tracking-tight"
         >
-          {{ releaseTitle ?? 'Vos premières tendances arrivent après quelques matins de veille.' }}
+          {{ curveTitle ?? 'Vos premières tendances arrivent après quelques matins de veille.' }}
         </h2>
-        <template v-if="dashboard && releaseTitle">
+        <template v-if="dashboard && curveTitle">
           <div class="mt-5">
-            <ReleaseChart
-              :columns="dashboard.release.columns"
-              :peaks="dashboard.release.peaks"
+            <OpeningCurveChart
+              :columns="dashboard.curve.columns"
+              :peaks="dashboard.curve.peaks"
             />
           </div>
           <p class="mt-2 text-xs font-medium text-ink-muted">
-            {{ dashboard.release.total }} place{{ dashboard.release.total > 1 ? 's' : '' }} apparue{{ dashboard.release.total > 1 ? 's' : '' }}, selon le nombre de jours avant le départ. Touchez une barre.
+            {{ dashboard.curve.total }} place{{ dashboard.curve.total > 1 ? 's' : '' }} apparue{{ dashboard.curve.total > 1 ? 's' : '' }}, selon le nombre de jours avant le départ. Touchez une barre.
           </p>
         </template>
         <template v-else>

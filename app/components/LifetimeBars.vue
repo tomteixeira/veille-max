@@ -4,7 +4,7 @@
   to react to, is emphasised.
 -->
 <script setup lang="ts">
-import type { LifetimeBucket } from '#shared/domain/seat-release'
+import type { LifetimeBucket } from '#shared/domain/opening-history'
 
 const props = defineProps<{
   buckets: readonly LifetimeBucket[]

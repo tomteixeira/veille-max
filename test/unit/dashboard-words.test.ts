@@ -1,18 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { bandLabel, lifetimeHeadline, lifetimeLabel, releaseHeadline, slotHeadline, weekdaysLabel } from '../../app/utils/dashboard-words'
+import { HOUR_BANDS, type SlotGrid } from '#shared/domain/opening-history'
+import { bandLabel, lifetimeHeadline, lifetimeLabel, curveHeadline, slotHeadline, weekdaysLabel } from '../../app/utils/dashboard-words'
+
+/** A slot grid whose best slot is `best`; its rows do not matter to the words. */
+function grid(best: SlotGrid['best']): SlotGrid {
+  return { bands: HOUR_BANDS, rows: [], best }
+}
 
 describe('dashboard words', () => {
-  it('concludes the release curve with its waves', () => {
-    expect(releaseHeadline([29, 11, 3])).toBe('Les places sortent en trois vagues : J-29, J-11 et J-3.')
-    expect(releaseHeadline([29, 3])).toBe('Les places sortent en deux vagues : J-29 et J-3.')
-    expect(releaseHeadline([11])).toBe('La plupart des places sortent à J-11.')
-    expect(releaseHeadline([])).toBeNull()
+  it('concludes the opening curve with its waves', () => {
+    expect(curveHeadline([29, 11, 3])).toBe('Les places sortent en trois vagues : J-29, J-11 et J-3.')
+    expect(curveHeadline([29, 3])).toBe('Les places sortent en deux vagues : J-29 et J-3.')
+    expect(curveHeadline([11])).toBe('Les places sortent surtout à J-11.')
+    expect(curveHeadline([])).toBeNull()
   })
 
   it('concludes the slots with the best one', () => {
-    expect(slotHeadline({ weekday: 7, band: 4, percent: 50 })).toBe('Meilleur créneau : le dimanche de 17 h à 20 h, où 50 % des trains ont une place.')
-    expect(slotHeadline({ weekday: 5, band: 0, percent: 12 })).toBe('Meilleur créneau : le vendredi avant 8 h, où 12 % des trains ont une place.')
-    expect(slotHeadline(null)).toBeNull()
+    expect(slotHeadline(grid({ weekday: 7, bandIndex: 4, percent: 50 }))).toBe('Meilleur créneau : le dimanche de 17 h à 20 h, où 50 % des trains ont une place.')
+    expect(slotHeadline(grid({ weekday: 5, bandIndex: 0, percent: 12 }))).toBe('Meilleur créneau : le vendredi avant 8 h, où 12 % des trains ont une place.')
+    expect(slotHeadline(grid(null))).toBeNull()
   })
 
   it('names the hour bands', () => {
@@ -26,7 +32,7 @@ describe('dashboard words', () => {
       { fromDays: 0, toDays: 0, openings: 9, percent: 46 },
       { fromDays: 7, toDays: null, openings: 2, percent: 54 },
     ]
-    expect(lifetimeHeadline({ buckets, total: 11 })).toBe('46 % des places partent en moins d’un jour.')
+    expect(lifetimeHeadline({ buckets, total: 11 })).toBe('46 % des places ont disparu dès le lendemain matin.')
     expect(lifetimeHeadline({ buckets: [], total: 0 })).toBeNull()
   })
 

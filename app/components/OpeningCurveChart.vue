@@ -1,20 +1,33 @@
 <!--
-  The release curve of the dashboard: one column per day before departure, the
+  The opening curve of the dashboard: one column per day before departure, the
   openings that started that day. The waves are emphasised and labelled;
   tapping a column shows its value.
 -->
 <script setup lang="ts">
-import type { ReleaseCurve } from '#shared/domain/seat-release'
+import type { OpeningCurve } from '#shared/domain/opening-history'
 
 const props = defineProps<{
-  columns: ReleaseCurve['columns']
+  columns: OpeningCurve['columns']
   peaks: readonly number[]
 }>()
 
 /** The day before departure of the tapped column. */
 const selected = ref<number | null>(null)
 const highest = computed(() => Math.max(1, ...props.columns.map(column => column.openings)))
-const ticks = [30, 20, 10, 0]
+/** The axis labels: the first column, every ten days, and departure; each with where it sits. */
+const ticks = computed(() => props.columns
+  .map((column, index) => ({ daysBefore: column.daysBefore, index }))
+  .filter(({ daysBefore }) => daysBefore % 10 === 0)
+  .map(({ daysBefore, index }) => {
+    const first = index === 0
+    const last = index === props.columns.length - 1
+    return {
+      daysBefore,
+      label: daysBefore === 0 ? 'Départ' : `J-${daysBefore}`,
+      class: first ? 'left-0' : last ? 'right-0' : '-translate-x-1/2',
+      style: first || last ? {} : { left: `${(index + 0.5) / props.columns.length * 100}%` },
+    }
+  }))
 
 function height(openings: number): string {
   // A column with openings stays visible, however small.
@@ -71,11 +84,11 @@ function tooltipPosition(index: number): string {
     >
       <span
         v-for="tick in ticks"
-        :key="tick"
+        :key="tick.daysBefore"
         class="absolute whitespace-nowrap"
-        :class="tick === 30 ? 'left-0' : tick === 0 ? 'right-0' : '-translate-x-1/2'"
-        :style="tick === 30 || tick === 0 ? {} : { left: `${(30 - tick + 0.5) / columns.length * 100}%` }"
-      >{{ tick === 0 ? 'Départ' : `J-${tick}` }}</span>
+        :class="tick.class"
+        :style="tick.style"
+      >{{ tick.label }}</span>
     </div>
   </div>
 </template>

@@ -284,6 +284,9 @@ isOneToOne: false
             "health":
 { Args: Record<PropertyKey, never>; Returns: string
                            },
+"opening_history":
+{ Args: { "routes": Json }; Returns: Json
+                           },
 "record_snapshot":
 { Args: { "ingested_at": string,"processed_at": string,"trains": Json }; Returns: Json
                            },
@@ -295,9 +298,6 @@ isOneToOne: false
                            },
 "save_template_leg":
 { Args: { "anchor": Database["public"]['Enums']["time_anchor"],"ideal_time": string,"kind": Database["public"]['Enums']["leg_kind"],"routes": Json,"weekday": number,"window_end"?: string,"window_start"?: string }; Returns: undefined
-                           },
-"seat_release_history":
-{ Args: { "routes": Json }; Returns: Json
                            },
 "tracked_routes":
 { Args: { "from_date": string,"to_date": string }; Returns: {

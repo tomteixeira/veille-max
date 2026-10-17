@@ -4,7 +4,7 @@
   percentage in each cell.
 -->
 <script setup lang="ts">
-import type { SlotGrid } from '#shared/domain/seat-release'
+import type { SlotGrid } from '#shared/domain/opening-history'
 
 const props = defineProps<{
   grid: SlotGrid
@@ -20,7 +20,7 @@ function strength(percent: number): number {
 
 function cellStyle(percent: number | null) {
   if (percent === null) return {}
-  return { backgroundColor: `color-mix(in oklab, var(--vm-accent) ${strength(percent).toFixed(0)}%, var(--vm-surface-muted))` }
+  return { backgroundColor: `color-mix(in oklab, var(--color-accent) ${strength(percent).toFixed(0)}%, var(--color-surface-muted))` }
 }
 </script>
 
@@ -78,7 +78,7 @@ function cellStyle(percent: number | null) {
       <span>0 %</span>
       <span
         class="h-2 flex-1 rounded-full"
-        style="background: linear-gradient(90deg, color-mix(in oklab, var(--vm-accent) 8%, var(--vm-surface-muted)), var(--vm-accent))"
+        style="background: linear-gradient(90deg, color-mix(in oklab, var(--color-accent) 8%, var(--color-surface-muted)), var(--color-accent))"
       />
       <span>{{ highest }} % des trains avec une place</span>
     </div>

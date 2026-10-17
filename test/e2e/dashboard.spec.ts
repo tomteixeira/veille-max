@@ -47,7 +47,7 @@ test('the dashboard shows when seats come out on the traveller’s routes, on th
       await signInThroughTheApp(page, request, email)
       await page.goto('/dashboard')
 
-      const release = card(page, 'Sorties de places')
+      const curve = card(page, 'Sorties de places')
       const slots = card(page, 'Créneaux')
       const lifetimes = card(page, 'Durée de vie')
 
@@ -55,27 +55,27 @@ test('the dashboard shows when seats come out on the traveller’s routes, on th
         await expect(page.getByText('Vos routes · depuis le 1 janv.')).toBeVisible()
         await expect(page.getByRole('button', { name: 'Vendredi & dimanche' })).toHaveAttribute('aria-pressed', 'true')
 
-        await expect(release.getByRole('heading')).toHaveText('La plupart des places sortent à J-8.')
-        await expect(release.getByRole('button', { name: /^J-\d+ :/ })).toHaveCount(31)
+        await expect(curve.getByRole('heading')).toHaveText('Les places sortent surtout à J-8.')
+        await expect(curve.getByRole('button', { name: /^J-\d+ :/ })).toHaveCount(31)
 
         await expect(slots.getByRole('heading')).toHaveText('Meilleur créneau : le vendredi de 11 h à 14 h, où 75 % des trains ont une place.')
         await expect(slots.getByRole('rowheader')).toHaveText(['Ven', 'Dim'])
 
-        await expect(lifetimes.getByRole('heading')).toHaveText('100 % des places partent en moins d’un jour.')
+        await expect(lifetimes.getByRole('heading')).toHaveText('100 % des places ont disparu dès le lendemain matin.')
         await expect(lifetimes.getByRole('listitem')).toHaveCount(5)
       })
 
       await test.step('tapping a column shows its value', async () => {
-        await release.getByRole('button', { name: 'J-8 : 2 places' }).click()
-        await expect(release.getByRole('status')).toHaveText('J-8 · 2 places')
+        await curve.getByRole('button', { name: 'J-8 : 2 places' }).click()
+        await expect(curve.getByRole('status')).toHaveText('J-8 · 2 places')
       })
 
       await test.step('every day counts the other weekdays too', async () => {
         await page.getByRole('button', { name: 'Tous les jours' }).click()
 
-        await expect(release.getByRole('heading')).toHaveText('Les places sortent en deux vagues : J-8 et J-5.')
+        await expect(curve.getByRole('heading')).toHaveText('Les places sortent en deux vagues : J-8 et J-5.')
         await expect(slots.getByRole('rowheader')).toHaveText(['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'])
-        await expect(lifetimes.getByRole('heading')).toHaveText('67 % des places partent en moins d’un jour.')
+        await expect(lifetimes.getByRole('heading')).toHaveText('67 % des places ont disparu dès le lendemain matin.')
       })
     })
   }

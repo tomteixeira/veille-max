@@ -1,3 +1,4 @@
+import { TRACKING_HORIZON_DAYS } from './evaluation'
 import type { Weekday } from './trip-template'
 
 // When MAX JEUNE seats come out on a traveller's routes (spec, user stories 59
@@ -5,9 +6,9 @@ import type { Weekday } from './trip-template'
 // every ingested snapshot, grouped by the weekday of the trains' travel date.
 
 /** The availability history of a traveller's routes, grouped as the database counts it. */
-export interface SeatReleaseHistory {
+export interface OpeningHistory {
   /** Openings that started `daysBefore` days before departure. */
-  releases: { weekday: Weekday, daysBefore: number, openings: number }[]
+  starts: { weekday: Weekday, daysBefore: number, openings: number }[]
   /** Train-mornings (a train listed by one snapshot) departing at `hour`, and how many of them had an open seat. */
   slots: { weekday: Weekday, hour: number, listed: number, open: number }[]
   /** Openings that ended with their seat taken, lasting `days` days from their first to their last snapshot. */
@@ -17,10 +18,7 @@ export interface SeatReleaseHistory {
 /** The travel weekdays the dashboard counts: some, or all of them. */
 export type WeekdayFilter = readonly Weekday[] | 'all'
 
-/** The MAX JEUNE booking window: a seat can come out at most this many days before departure. */
-export const RELEASE_HORIZON_DAYS = 30
-
-export interface ReleaseCurve {
+export interface OpeningCurve {
   /** One column per day before departure, from D-30 to D-0. */
   columns: { daysBefore: number, openings: number }[]
   /** The waves: the days before departure of up to three peaks, earliest first. */
@@ -47,8 +45,8 @@ export interface SlotGrid {
   bands: readonly HourBand[]
   /** One row per weekday, Monday first: per band, the percentage of train-mornings with an open seat, `null` without any. */
   rows: { weekday: Weekday, percents: (number | null)[] }[]
-  /** The slot with the highest percentage (band as an index into `bands`), `null` without any train. */
-  best: { weekday: Weekday, band: number, percent: number } | null
+  /** The slot with the highest percentage, `null` without any train. */
+  best: { weekday: Weekday, bandIndex: number, percent: number } | null
 }
 
 /** A range of opening lifetimes, in days; `toDays` is `null` for the open-ended last one. */
@@ -65,8 +63,8 @@ export interface LifetimeSpread {
   total: number
 }
 
-export interface SeatReleaseDashboard {
-  release: ReleaseCurve
+export interface OpeningDashboard {
+  curve: OpeningCurve
   slots: SlotGrid
   lifetimes: LifetimeSpread
 }
@@ -86,21 +84,21 @@ const MAX_PEAKS = 3
 const PEAK_THRESHOLD = 1 / 4
 
 /** The dashboard's charts for the trains travelling on `weekdays`. */
-export function seatReleaseDashboard(history: SeatReleaseHistory, weekdays: WeekdayFilter): SeatReleaseDashboard {
+export function openingDashboard(history: OpeningHistory, weekdays: WeekdayFilter): OpeningDashboard {
   const kept = weekdays === 'all' ? ALL_WEEKDAYS : ALL_WEEKDAYS.filter(weekday => weekdays.includes(weekday))
   const counted = ({ weekday }: { weekday: Weekday }) => kept.includes(weekday)
 
   return {
-    release: releaseCurve(history.releases.filter(counted)),
+    curve: openingCurve(history.starts.filter(counted)),
     slots: slotGrid(history.slots.filter(counted), kept),
     lifetimes: lifetimeSpread(history.lifetimes.filter(counted)),
   }
 }
 
-function releaseCurve(releases: SeatReleaseHistory['releases']): ReleaseCurve {
-  const columns = Array.from({ length: RELEASE_HORIZON_DAYS + 1 }, (_, index) => ({ daysBefore: RELEASE_HORIZON_DAYS - index, openings: 0 }))
-  for (const { daysBefore, openings } of releases) {
-    const column = columns[RELEASE_HORIZON_DAYS - daysBefore]
+function openingCurve(starts: OpeningHistory['starts']): OpeningCurve {
+  const columns = Array.from({ length: TRACKING_HORIZON_DAYS + 1 }, (_, index) => ({ daysBefore: TRACKING_HORIZON_DAYS - index, openings: 0 }))
+  for (const { daysBefore, openings } of starts) {
+    const column = columns[TRACKING_HORIZON_DAYS - daysBefore]
     if (column) column.openings += openings
   }
   return {
@@ -132,7 +130,7 @@ function peaks(values: readonly number[]): number[] {
     .sort((a, b) => a - b)
 }
 
-function slotGrid(slots: SeatReleaseHistory['slots'], weekdays: readonly Weekday[]): SlotGrid {
+function slotGrid(slots: OpeningHistory['slots'], weekdays: readonly Weekday[]): SlotGrid {
   let best: SlotGrid['best'] = null
   const rows = weekdays.map((weekday) => {
     const percents = HOUR_BANDS.map((band, bandIndex) => {
@@ -140,7 +138,7 @@ function slotGrid(slots: SeatReleaseHistory['slots'], weekdays: readonly Weekday
       const listed = inBand.reduce((sum, slot) => sum + slot.listed, 0)
       if (listed === 0) return null
       const percent = Math.round(100 * inBand.reduce((sum, slot) => sum + slot.open, 0) / listed)
-      if (!best || percent > best.percent) best = { weekday, band: bandIndex, percent }
+      if (!best || percent > best.percent) best = { weekday, bandIndex, percent }
       return percent
     })
     return { weekday, percents }
@@ -148,7 +146,7 @@ function slotGrid(slots: SeatReleaseHistory['slots'], weekdays: readonly Weekday
   return { bands: HOUR_BANDS, rows, best }
 }
 
-function lifetimeSpread(lifetimes: SeatReleaseHistory['lifetimes']): LifetimeSpread {
+function lifetimeSpread(lifetimes: OpeningHistory['lifetimes']): LifetimeSpread {
   const counts = LIFETIME_RANGES.map(range => lifetimes
     .filter(({ days }) => days >= range.fromDays && (range.toDays === null || days <= range.toDays))
     .reduce((sum, lifetime) => sum + lifetime.openings, 0))
