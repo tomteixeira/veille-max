@@ -13,7 +13,6 @@ const title = computed(() => tripTitle(props.trip))
 
 <template>
   <TicketCard
-    class="pb-3"
     :aria-labelledby="headingId"
   >
     <div class="flex items-start justify-between gap-2 px-5 pt-5">
@@ -45,6 +44,7 @@ const title = computed(() => tripTitle(props.trip))
     >
       <TicketPerforation v-if="index > 0" />
       <TripLegHalf
+        :class="index > 0 ? 'pb-6' : undefined"
         :trip-key="trip.key"
         :leg="trip.legs[kind]"
         :station-name="stationName"

@@ -15,7 +15,6 @@
   --radius-card: 24px;
   --radius-control: 16px;
 
-  --shadow-ticket: 0 1px 0 rgb(0 0 0 / 0.04), 0 14px 32px -14px rgb(0 0 0 / 0.25);
   --shadow-float: 0 18px 40px -12px rgb(0 0 0 / 0.45);
 
   --tracking-eyebrow: 0.16em;
@@ -57,6 +56,9 @@
 
 :root {
   color-scheme: light;
+
+  /* Drop shadows follow the ticket's alpha contour, including its notches. */
+  --ticket-shadow: drop-shadow(0 1px 0 rgb(0 0 0 / 0.04)) drop-shadow(0 8px 10px rgb(0 0 0 / 0.12));
 
   --vm-canvas: var(--color-stone-100);
   --vm-surface: var(--color-white);
