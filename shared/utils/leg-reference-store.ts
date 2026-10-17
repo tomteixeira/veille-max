@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { LegReference } from '../domain/evaluation'
 import type { Database } from '../types/database.types'
+import { bookedTrainFromRow, type TrainRow } from './observation-store'
 
 // Reads and writes a traveller's leg references (table `leg_references`).
 // With a traveller's client, RLS limits every read and write to their own rows.
@@ -10,25 +11,16 @@ type Client = SupabaseClient<Database>
 /** The reference best candidate of every leg of `travellerId` evaluated so far. */
 export async function loadLegReferences(client: Client, travellerId: string): Promise<LegReference[]> {
   const { data, error } = await client.from('leg_references')
-    .select('trip_key, leg_kind, travel_date, train_number, origin_code, destination_code, departure_time, arrival_time')
+    .select('trip_key, leg_kind, ranking_key, travel_date, train_number, origin_code, destination_code, departure_time, arrival_time')
     .eq('user_id', travellerId)
   if (error) throw error
 
   return data.map(row => ({
     tripKey: row.trip_key,
     legKind: row.leg_kind,
+    rankingKey: row.ranking_key,
     // The train's columns are all set, or all null.
-    train: row.travel_date === null
-      ? null
-      : {
-          date: row.travel_date,
-          trainNumber: row.train_number!,
-          originCode: row.origin_code!,
-          destinationCode: row.destination_code!,
-          // Postgres `time` reads « HH:MM:SS »; the domain uses « HH:MM ».
-          departureTime: row.departure_time!.slice(0, 5),
-          arrivalTime: row.arrival_time!.slice(0, 5),
-        },
+    train: row.travel_date === null ? null : bookedTrainFromRow(row as TrainRow),
   }))
 }
 
@@ -36,11 +28,12 @@ export async function loadLegReferences(client: Client, travellerId: string): Pr
 export async function saveLegReferences(client: Client, travellerId: string, snapshotId: number, references: readonly LegReference[]): Promise<void> {
   if (references.length === 0) return
 
-  const { error } = await client.from('leg_references').upsert(references.map(({ tripKey, legKind, train }) => ({
+  const { error } = await client.from('leg_references').upsert(references.map(({ tripKey, legKind, rankingKey, train }) => ({
     user_id: travellerId,
     trip_key: tripKey,
     leg_kind: legKind,
     snapshot_id: snapshotId,
+    ranking_key: rankingKey,
     travel_date: train?.date ?? null,
     train_number: train?.trainNumber ?? null,
     origin_code: train?.originCode ?? null,

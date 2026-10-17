@@ -1,6 +1,6 @@
-import type { Candidate, ImprovementKind, Leg, LegStatus, RankedBooking, Trip } from '#shared/domain/evaluation'
+import type { Candidate, Leg, LegStatus, RankedBooking, Trip } from '#shared/domain/evaluation'
 import type { LegSettings } from '#shared/domain/trip-template'
-import type { ParisDate } from '#shared/utils/paris-time'
+import { longDayName, type ParisDate } from '#shared/utils/paris-time'
 import type { DayChoice } from './leg-words'
 
 /** The chip of a leg on its ticket half. */
@@ -12,13 +12,6 @@ export const LEG_STATUS_NAMES: Record<LegStatus, string> = {
   'past': 'Passé',
 }
 
-/** The chip of an improvement in « Nouveautés ». */
-export const IMPROVEMENT_NAMES: Record<ImprovementKind, string> = {
-  'first-candidate': 'Premier train',
-  'new-best': 'Meilleur choix',
-  'better-than-booking': 'Mieux que votre billet',
-}
-
 /** « 3 nouveaux trains », « 1 nouveau train »: the home headline on a morning with improvements. */
 export function newTrainsText(count: number): string {
   return count > 1 ? `${count} nouveaux trains` : `${count} nouveau train`
@@ -28,7 +21,6 @@ export function newTrainsText(count: number): string {
 const dayAndMonth = new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', day: 'numeric', month: 'short' })
 const day = new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', day: 'numeric' })
 const shortWeekday = new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', weekday: 'short' })
-const longDay = new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' })
 
 function utcMidnight(date: ParisDate): Date {
   return new Date(`${date}T00:00:00Z`)
@@ -53,12 +45,6 @@ export function shortDay(date: ParisDate): string {
 export function durationText(minutes: number): string {
   if (minutes < 60) return `${minutes} min`
   return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`
-}
-
-/** « Vendredi 23 octobre »: a leg's day on its leg view. */
-export function longDayName(date: ParisDate): string {
-  const text = longDay.format(utcMidnight(date))
-  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`
 }
 
 const dayAndMonthDigits = new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', day: '2-digit', month: '2-digit' })

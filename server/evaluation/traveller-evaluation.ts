@@ -27,6 +27,10 @@ export interface TravellerEvaluation {
   snapshotId: number | null
   /** Every tracked leg's best candidate in the latest snapshot: the references to store once it is evaluated. */
   references: LegReference[]
+  /** The references of the legs whose stored one is missing or was ranked with other settings: those a settings change resets. */
+  resets: LegReference[]
+  /** Whether any reference was stored for the traveller before: `false` until their first evaluation. */
+  evaluatedBefore: boolean
   /** The legs whose best candidate improves on their stored reference, muted ones aside. */
   improvements: Improvement[]
 }
@@ -53,7 +57,7 @@ export async function evaluateTraveller(client: SupabaseClient<Database>, travel
   const observations = snapshot
     ? await loadOpenTrains(client, snapshot.id, [...templateRoutes, ...customisedRoutes], { from: today, to: addDays(today, TRACKING_HORIZON_DAYS) })
     : []
-  const { trips, upcoming, activeBookings, references, improvements } = evaluate({
+  const { trips, upcoming, activeBookings, references, resets, improvements } = evaluate({
     now,
     settings: { template, routeWeight, customisations, mutes, bookings },
     observations,
@@ -69,6 +73,8 @@ export async function evaluateTraveller(client: SupabaseClient<Database>, travel
     stationNames: await loadStationNames(client, [...trips, ...upcoming]),
     snapshotId: snapshot?.id ?? null,
     references,
+    resets,
+    evaluatedBefore: previousReferences.length > 0,
     improvements,
   }
 }

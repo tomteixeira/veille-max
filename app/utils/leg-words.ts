@@ -4,9 +4,6 @@ export { LEG_KINDS } from '#shared/domain/trip-template'
 
 export const LEG_NAMES: Record<LegKind, string> = { outbound: 'Aller', return: 'Retour' }
 
-/** « l’aller », « le retour »: a leg named inside a sentence. */
-export const LEG_NAMES_IN_SENTENCE: Record<LegKind, string> = { outbound: 'l’aller', return: 'le retour' }
-
 export const WEEKDAY_NAMES: Record<Weekday, string> = {
   1: 'Lundi',
   2: 'Mardi',

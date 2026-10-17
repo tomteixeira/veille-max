@@ -72,6 +72,8 @@ export interface Booking {
 export interface LegReference {
   tripKey: string
   legKind: LegKind
+  /** What ranked the leg then: its date, settings and the route weight. A reference ranked otherwise is stale. */
+  rankingKey: string
   /** The leg's best candidate then, `null` when it had none. */
   train: BookedTrain | null
 }
@@ -80,7 +82,11 @@ export interface EvaluationInput {
   now: Date
   settings: TravellerSettings
   observations: readonly TrainObservation[]
-  /** The references stored after the previous snapshot. A leg without one is told its first candidate. */
+  /**
+   * The references stored after the previous snapshot. A leg without one is
+   * told its first candidate; a leg whose settings changed since its
+   * reference was stored is told nothing, as after a reset.
+   */
   references?: readonly LegReference[]
 }
 
@@ -175,6 +181,12 @@ export interface Evaluation {
   activeBookings: number
   /** The new reference of every tracked leg that has not passed, muted or not: its best candidate now. */
   references: LegReference[]
+  /**
+   * The new references of the legs whose stored reference is missing or was
+   * ranked with other settings: those a settings change resets, without
+   * notifying (spec, "Settings writes"). The other legs keep theirs.
+   */
+  resets: LegReference[]
   /** The improvements to notify, against `EvaluationInput.references`: never on a muted leg. */
   improvements: Improvement[]
 }
@@ -191,11 +203,12 @@ export function evaluate({ now, settings, observations, references: previousRefe
     bookings.find(booking => booking.tripKey === tripKey && booking.legKind === kind)?.train ?? null
 
   const previousReference = (tripKey: string, kind: LegKind) =>
-    previousReferences.find(reference => reference.tripKey === tripKey && reference.legKind === kind)?.train ?? null
+    previousReferences.find(reference => reference.tripKey === tripKey && reference.legKind === kind)
 
   const trips: Trip[] = []
   const upcoming: UpcomingTrip[] = []
   const references: LegReference[] = []
+  const resets: LegReference[] = []
   const improvements: Improvement[] = []
   // The template's outbound weekday two weeks before today's, so that a trip
   // whose return leg was moved later is still found, then every week after it.
@@ -223,8 +236,14 @@ export function evaluate({ now, settings, observations, references: previousRefe
     trips.push(trip)
     for (const leg of Object.values(trip.legs)) {
       if (leg.status === 'past') continue
-      references.push({ tripKey: key, legKind: leg.kind, train: leg.best && bookedTrain(leg.best.train) })
-      const kind = improvementKind(leg, previousReference(key, leg.kind), routeWeight)
+      const reference = { tripKey: key, legKind: leg.kind, rankingKey: rankingKey(leg, routeWeight), train: leg.best && bookedTrain(leg.best.train) }
+      references.push(reference)
+      const previous = previousReference(key, leg.kind)
+      const stale = previous !== undefined && previous.rankingKey !== reference.rankingKey
+      if (!previous || stale) resets.push(reference)
+      // Ranked with other settings, as when a reset failed: replaced without notifying.
+      if (stale) continue
+      const kind = improvementKind(leg, previous?.train ?? null, routeWeight)
       // Muted legs keep their reference up to date, but are never notified.
       if (kind && !leg.muted) improvements.push({ tripKey: key, legKind: leg.kind, date: leg.date, kind, candidate: leg.best! })
     }
@@ -232,7 +251,13 @@ export function evaluate({ now, settings, observations, references: previousRefe
   // Customised dates can put a trip before the one of the previous week.
   const soonestFirst = (a: Trip, b: Trip) => firstLegDate(a).localeCompare(firstLegDate(b))
   const activeBookings = bookings.filter(booking => booking.train.date >= today).length
-  return { trips: trips.sort(soonestFirst), upcoming: upcoming.sort(soonestFirst), activeBookings, references, improvements }
+  return { trips: trips.sort(soonestFirst), upcoming: upcoming.sort(soonestFirst), activeBookings, references, resets, improvements }
+}
+
+/** What ranks a leg's candidates: its date, anchor, window, ideal time and ranked routes, and the route weight. */
+function rankingKey({ date, settings: { anchor, window, idealTime, routes } }: Leg, routeWeight: number): string {
+  const routeCodes = routes.map(route => `${route.originCode}>${route.destinationCode}`)
+  return JSON.stringify([date, anchor, window.start, window.end, idealTime, routeCodes, routeWeight])
 }
 
 /** A train without whether it has a seat. */

@@ -28,16 +28,22 @@ function train(trainNumber: string, route: Route, departureTime: string, arrival
   return { date, trainNumber, ...route, departureTime, arrivalTime, open: true }
 }
 
-function settings({ mutes, bookings, outboundRoutes = [route1, route2, route3] }: { mutes?: TripMute[], bookings?: Booking[], outboundRoutes?: Route[] } = {}): TravellerSettings {
+function settings({ mutes, bookings, outboundRoutes = [route1, route2, route3], routeWeight }: { mutes?: TripMute[], bookings?: Booking[], outboundRoutes?: Route[], routeWeight?: number } = {}): TravellerSettings {
   const template = defaultTripTemplate()
   return {
     template: {
       outbound: { ...template.outbound, routes: outboundRoutes },
       return: { ...template.return, routes: [partDieuToParisLyon] },
     },
+    routeWeight,
     mutes,
     bookings,
   }
+}
+
+/** « 2026-W43 outbound »: the legs of some references. */
+function legsOf(references: readonly LegReference[]): string[] {
+  return references.map(reference => `${reference.tripKey} ${reference.legKind}`)
 }
 
 function booked(train: TrainObservation): Booking {
@@ -121,8 +127,8 @@ describe('improvements', () => {
       const { references } = evaluate({ now: fridayMorning, settings: settings(), observations: [onRoute2, onRoute1], references: [] })
       const { open: _open, ...bestTrain } = onRoute1
 
-      expect(references).toContainEqual({ tripKey: '2026-W43', legKind: 'outbound', train: bestTrain })
-      expect(references).toContainEqual({ tripKey: '2026-W43', legKind: 'return', train: null })
+      expect(references).toContainEqual(expect.objectContaining({ tripKey: '2026-W43', legKind: 'outbound', train: bestTrain }))
+      expect(references).toContainEqual(expect.objectContaining({ tripKey: '2026-W43', legKind: 'return', train: null }))
       expect(references.map(reference => reference.tripKey)).not.toContain('2026-W48')
     })
 
@@ -133,22 +139,51 @@ describe('improvements', () => {
       expect(references.filter(reference => reference.tripKey === '2026-W42').map(reference => reference.legKind)).toEqual(['return'])
     })
 
-    it('are ranked with the leg’s current settings: one whose route was removed ranks below every candidate', () => {
-      const { open: _open, ...onRoute3Train } = onRoute3
-      const reference: LegReference = { tripKey: '2026-W43', legKind: 'outbound', train: onRoute3Train }
+    it('are replaced without notifying once the leg’s settings changed, even when no reset stored them', () => {
+      const before = evaluate({ now: fridayMorning, settings: settings(), observations: [onRoute3], references: [] })
 
-      const evaluation = evaluate({ now: fridayMorning, settings: settings({ outboundRoutes: [route1, route2] }), observations: [onRoute2], references: [reference] })
+      // Route 3 is removed: the new best candidate would rank above the reference.
+      const after = evaluate({ now: fridayMorning, settings: settings({ outboundRoutes: [route1, route2] }), observations: [onRoute3, onRoute2], references: before.references })
 
-      expect(improvementsOf(evaluation)).toEqual(['new-best 6605'])
+      expect(improvementsOf(after)).toEqual([])
+      expect(after.references).toContainEqual(expect.objectContaining({ tripKey: '2026-W43', legKind: 'outbound', train: expect.objectContaining({ trainNumber: '6605' }) }))
+    })
+  })
+
+  describe('resets', () => {
+    it('are the new references of the legs whose settings changed, and only theirs', () => {
+      const before = evaluate({ now: fridayMorning, settings: settings(), observations: [onRoute1], references: [] })
+
+      // The traveller ranks route 3 first on the outbound leg of the trip template.
+      const { resets } = evaluate({ now: fridayMorning, settings: settings({ outboundRoutes: [route3, route1, route2] }), observations: [onRoute1, onRoute3], references: before.references })
+
+      expect(legsOf(resets)).toEqual(['2026-W42 outbound', '2026-W43 outbound', '2026-W44 outbound', '2026-W45 outbound', '2026-W46 outbound'])
+      expect(resets.find(reset => reset.tripKey === '2026-W43')?.train?.trainNumber).toBe('5101')
     })
 
-    it('silence a leg once stored after a settings change: they are its current best candidate', () => {
-      const before = evaluate({ now: fridayMorning, settings: settings(), observations: [onRoute1, onRoute3], references: [] })
-      // The traveller ranks route 3 first: its train becomes the best candidate, the reference is reset to it.
-      const changed = settings({ outboundRoutes: [route3, route1, route2] })
-      const reset = evaluate({ now: fridayMorning, settings: changed, observations: [onRoute1, onRoute3], references: before.references })
+    it('cover every leg when the route weight changes', () => {
+      const before = evaluate({ now: fridayMorning, settings: settings(), observations: [], references: [] })
 
-      const next = evaluate({ now: fridayMorning, settings: changed, observations: [onRoute1, onRoute3], references: reset.references })
+      const { resets, references } = evaluate({ now: fridayMorning, settings: settings({ routeWeight: 10 }), observations: [], references: before.references })
+
+      expect(legsOf(resets)).toEqual(legsOf(references))
+    })
+
+    it('cover the legs without a reference, and none when nothing changed', () => {
+      const before = evaluate({ now: fridayMorning, settings: settings(), observations: [onRoute1], references: [] })
+      const again = evaluate({ now: fridayMorning, settings: settings(), observations: [onRoute1, onRoute2], references: before.references })
+
+      expect(legsOf(before.resets)).toEqual(legsOf(before.references))
+      expect(again.resets).toEqual([])
+    })
+
+    it('silence a leg once stored: the next snapshot only tells what improves on them', () => {
+      const before = evaluate({ now: fridayMorning, settings: settings(), observations: [onRoute1, onRoute3], references: [] })
+      const changed = settings({ outboundRoutes: [route3, route1, route2] })
+      const { resets } = evaluate({ now: fridayMorning, settings: changed, observations: [onRoute1, onRoute3], references: before.references })
+      const stored = [...before.references.filter(reference => !legsOf(resets).includes(`${reference.tripKey} ${reference.legKind}`)), ...resets]
+
+      const next = evaluate({ now: fridayMorning, settings: changed, observations: [onRoute1, onRoute3], references: stored })
 
       expect(improvementsOf(next)).toEqual([])
     })

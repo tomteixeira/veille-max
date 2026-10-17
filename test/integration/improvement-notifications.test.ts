@@ -14,18 +14,24 @@ import { admin, removeTraveller, signedInTraveller, type Traveller } from './sup
 
 const parisLyonToPartDieu: Route = { originCode: 'FRPLY', destinationCode: 'FRLPD' }
 const parisLyonToPerrache: Route = { originCode: 'FRPLY', destinationCode: 'FRLPE' }
+const parisLyonToMarseille: Route = { originCode: 'FRPLY', destinationCode: 'FRMSC' }
+const partDieuToParisLyon: Route = { originCode: 'FRLPD', destinationCode: 'FRPLY' }
 
 // Snapshots SNCF takes at 06:24 Paris, ingested at the next tick.
+const thursday = { processedAt: new Date('2026-10-15T04:24:05Z'), tick: new Date('2026-10-15T04:30:00Z') }
 const friday = { processedAt: new Date('2026-10-16T04:24:09Z'), tick: new Date('2026-10-16T04:30:00Z') }
 const saturday = { processedAt: new Date('2026-10-17T04:24:11Z'), tick: new Date('2026-10-17T04:30:00Z') }
 const sunday = { processedAt: new Date('2026-10-18T04:24:07Z'), tick: new Date('2026-10-18T04:30:00Z') }
 
 // Trains of the outbound leg of week 43, Friday 23 October: arrive before 10:00, ideally 09:00.
-function train(trainNumber: string, route: Route, departureTime: string, arrivalTime: string): SnapshotTrain {
-  return { date: '2026-10-23', trainNumber, ...route, departureTime, arrivalTime, open: true }
+function train(trainNumber: string, route: Route, departureTime: string, arrivalTime: string, date = '2026-10-23'): SnapshotTrain {
+  return { date, trainNumber, ...route, departureTime, arrivalTime, open: true }
 }
 const toPartDieu = train('6603', parisLyonToPartDieu, '07:00', '08:56')
 const toPerrache = train('6605', parisLyonToPerrache, '07:04', '09:00')
+const toMarseille = train('6107', parisLyonToMarseille, '07:07', '10:24')
+// The return leg of week 43, Sunday 25 October: leave after 14:00, ideally 17:00.
+const backToParis = train('6680', partDieuToParisLyon, '17:04', '19:00', '2026-10-25')
 
 /** Turns notifications on for `traveller` on a new device, and returns its subscription endpoint. */
 async function turnOnDevice(traveller: Traveller, deviceLabel: string): Promise<string> {
@@ -46,12 +52,15 @@ describe('improvement notifications through the tick', () => {
   let gateway: ReturnType<typeof recordingPushGateway>
   let fixture: ReturnType<typeof fixtureSnapshotSource>
 
-  /** Publishes `trains` as the snapshot of `day`, runs the tick, and returns the pushes it sent. */
-  async function snapshot(day: typeof friday, trains: SnapshotTrain[]) {
+  /**
+   * Publishes `trains` as the snapshot of `day`, runs the tick, and returns
+   * the pushes it sent. Without push gateway, the tick only ingests it.
+   */
+  async function snapshot(day: typeof friday, trains: SnapshotTrain[], { withGateway = true } = {}) {
     const published: FixtureSnapshot = { processedAt: day.processedAt, trains }
     fixture.publish(published)
     const sentBefore = gateway.sent.length
-    const summary = await runTick({ db: admin, source: fixture.source, gateway, now: day.tick })
+    const summary = await runTick({ db: admin, source: fixture.source, gateway: withGateway ? gateway : null, now: day.tick })
     return { summary, sent: gateway.sent.slice(sentBefore) }
   }
 
@@ -65,7 +74,9 @@ describe('improvement notifications through the tick', () => {
       other: await turnOnDevice(other, 'iPhone'),
     }
     gateway = recordingPushGateway()
-    fixture = fixtureSnapshotSource({ processedAt: friday.processedAt, trains: [] })
+    fixture = fixtureSnapshotSource({ processedAt: thursday.processedAt, trains: [] })
+    // A first, empty snapshot: each traveller's first evaluation only stores their references.
+    await snapshot(thursday, [])
   })
 
   afterEach(async () => {
@@ -83,6 +94,33 @@ describe('improvement notifications through the tick', () => {
     // The other traveller does not rank Perrache: nothing for them.
     expect(sent.map(push => push.endpoint)).not.toContain(devices.other)
     expect(summary.improvements).toMatchObject({ snapshotId: summary.snapshotId, improvements: 1, delivered: 2, gone: 0, failed: 0 })
+  })
+
+  it('reaches only the devices of the traveller whose leg improved', async () => {
+    await rankOutbound(other, [parisLyonToMarseille])
+    await resetLegReferences(other.client, other.id, new Date('2026-10-15T08:00:00Z'))
+
+    const { sent } = await snapshot(friday, [toMarseille])
+
+    expect(sent.map(push => push.endpoint)).toEqual([devices.other])
+  })
+
+  it('notifies nothing on a traveller’s first evaluation, such as the first deploy: it only stores their references', async () => {
+    const newcomer = await signedInTraveller()
+    try {
+      await rankOutbound(newcomer, [parisLyonToPartDieu])
+      const newcomerDevice = await turnOnDevice(newcomer, 'iPhone')
+
+      const first = await snapshot(friday, [toPartDieu])
+      const next = await snapshot(saturday, [toPartDieu, toPerrache])
+
+      expect(first.sent.map(push => push.endpoint)).not.toContain(newcomerDevice)
+      expect(first.sent.map(push => push.endpoint)).toContain(devices.iPhone)
+      expect(next.sent).toEqual([])
+    }
+    finally {
+      await removeTraveller(newcomer)
+    }
   })
 
   it('replays a sequence of snapshots: a new best notifies, a worse train or a disappearance does not', async () => {
@@ -110,7 +148,7 @@ describe('improvement notifications through the tick', () => {
     expect(first.sent).toHaveLength(3)
     // As if the tick had stopped after sending, before storing the references and stamping the snapshot.
     await admin.from('snapshots').update({ evaluated_at: null }).eq('id', first.summary.snapshotId!)
-    await admin.from('leg_references').delete().in('user_id', [traveller.id, other.id])
+    await admin.from('leg_references').delete().in('user_id', [traveller.id, other.id]).eq('trip_key', '2026-W43').eq('leg_kind', 'outbound')
 
     const again = await snapshot({ ...friday, tick: new Date('2026-10-16T04:45:00Z') }, [toPartDieu])
 
@@ -146,6 +184,20 @@ describe('improvement notifications through the tick', () => {
     const { sent } = await snapshot(saturday, [toPartDieu, toPerrache])
 
     expect(sent).toEqual([])
+  })
+
+  it('resets only the legs whose settings changed: a snapshot not evaluated yet still notifies the others', async () => {
+    await saveTemplateLeg(traveller.client, 'return', { ...defaultTripTemplate().return, routes: [partDieuToParisLyon] })
+    await resetLegReferences(traveller.client, traveller.id, new Date('2026-10-15T08:00:00Z'))
+    // SNCF publishes a snapshot, ingested before notifications could be sent.
+    await snapshot(friday, [toPartDieu, backToParis], { withGateway: false })
+
+    // The traveller changes their return leg meanwhile.
+    await saveTemplateLeg(traveller.client, 'return', { ...defaultTripTemplate().return, idealTime: '18:00', routes: [partDieuToParisLyon] })
+    await resetLegReferences(traveller.client, traveller.id, new Date('2026-10-16T05:00:00Z'))
+    const { sent } = await snapshot({ ...friday, tick: new Date('2026-10-16T05:15:00Z') }, [toPartDieu, backToParis])
+
+    expect(sent.filter(push => push.endpoint === devices.iPhone).map(push => push.message.url)).toEqual(['/trips/2026-W43/outbound'])
   })
 
   describe('« Nouveautés » on the home screen', () => {

@@ -91,14 +91,14 @@ isOneToOne: false
                   ]
                 },"leg_references": {
                   Row: {
-                    "arrival_time": string | null,"departure_time": string | null,"destination_code": string | null,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string | null,"snapshot_id": number,"train_number": string | null,"travel_date": string | null,"trip_key": string,"updated_at": string,"user_id": string
+                    "arrival_time": string | null,"departure_time": string | null,"destination_code": string | null,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string | null,"ranking_key": string,"snapshot_id": number,"train_number": string | null,"travel_date": string | null,"trip_key": string,"updated_at": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "arrival_time"?: string | null,"departure_time"?: string | null,"destination_code"?: string | null,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code"?: string | null,"snapshot_id": number,"train_number"?: string | null,"travel_date"?: string | null,"trip_key": string,"updated_at"?: string,"user_id"?: string
+                    "arrival_time"?: string | null,"departure_time"?: string | null,"destination_code"?: string | null,"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code"?: string | null,"ranking_key": string,"snapshot_id": number,"train_number"?: string | null,"travel_date"?: string | null,"trip_key": string,"updated_at"?: string,"user_id"?: string
                   }
                   Update: {
-                    "arrival_time"?: string | null,"departure_time"?: string | null,"destination_code"?: string | null,"leg_kind"?: Database["public"]['Enums']["leg_kind"],"origin_code"?: string | null,"snapshot_id"?: number,"train_number"?: string | null,"travel_date"?: string | null,"trip_key"?: string,"updated_at"?: string,"user_id"?: string
+                    "arrival_time"?: string | null,"departure_time"?: string | null,"destination_code"?: string | null,"leg_kind"?: Database["public"]['Enums']["leg_kind"],"origin_code"?: string | null,"ranking_key"?: string,"snapshot_id"?: number,"train_number"?: string | null,"travel_date"?: string | null,"trip_key"?: string,"updated_at"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {

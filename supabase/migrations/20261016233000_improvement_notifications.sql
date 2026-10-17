@@ -19,6 +19,9 @@ create table public.leg_references (
   leg_kind public.leg_kind not null,
   -- The snapshot the reference was evaluated against.
   snapshot_id bigint not null references public.snapshots (id) on delete cascade,
+  -- What ranked the leg then (its date, settings and the route weight): a
+  -- reference ranked otherwise is replaced without notifying.
+  ranking_key text not null,
   -- The best candidate, all null when the leg had none. Its times are kept, so
   -- it can be ranked once it no longer shows a seat.
   travel_date date,

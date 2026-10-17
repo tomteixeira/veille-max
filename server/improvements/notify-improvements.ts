@@ -31,7 +31,9 @@ export interface ImprovementsSummary extends NotificationResult {
  * Evaluates every traveller against the latest snapshot, unless it was
  * already evaluated (spec, "Tick endpoint"): notifies each leg whose best
  * candidate improved, then stores every leg's new reference, muted or not.
- * Returns `null` when there was nothing to evaluate.
+ * A traveller's first evaluation only stores their references, so that the
+ * first deploy, or a first snapshot, does not notify every train they can
+ * already see. Returns `null` when there was nothing to evaluate.
  *
  * Each improvement is logged before it is sent, once per leg and snapshot: a
  * run that stopped half-way can run again without sending anything twice.
@@ -50,7 +52,7 @@ export async function notifyImprovements({ db, gateway, now }: ImprovementsDepen
     if (evaluation.snapshotId !== snapshot.id) return summary
     const stationName = (code: string) => evaluation.stationNames[code] ?? code
 
-    for (const improvement of evaluation.improvements) {
+    for (const improvement of evaluation.evaluatedBefore ? evaluation.improvements : []) {
       if (!await logImprovement(db, travellerId, snapshot.id, improvement)) continue
       const result = await notifyTraveller(db, gateway, travellerId, improvementMessage(improvement, stationName))
       summary.improvements += 1

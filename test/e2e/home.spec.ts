@@ -107,7 +107,7 @@ test('the home screen lists this morning’s improvements under « Nouveautés �
       const news = page.getByRole('region', { name: 'Nouveautés' }).getByRole('listitem')
       await expect(news).toHaveCount(2)
       await expect(news.first()).toContainText('Aller')
-      await expect(news.first()).toContainText('Meilleur choix')
+      await expect(news.first()).toContainText('Meilleur train')
       await expect(news.first()).toContainText('07:00')
       await expect(news.first()).toContainText('Paris Gare de Lyon → Lyon Part-Dieu')
       await expect(news.nth(1)).toContainText('Premier train')
