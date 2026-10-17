@@ -1,5 +1,6 @@
 import { serverSupabaseServiceRole } from '#supabase/server'
 import type { Database } from '#shared/types/database.types'
+import { configuredPushGateway } from '../../push/configured-push-gateway'
 import { openDataSnapshotSource } from '../../snapshots/open-data-snapshot-source'
 import { runTick, type TickSummary } from '../../tick/run-tick'
 import { isTickAuthorized, TICK_SECRET_HEADER } from '../../tick/tick-secret'
@@ -18,6 +19,7 @@ export default defineEventHandler(async (event): Promise<TickSummary> => {
   const summary = await runTick({
     db: serverSupabaseServiceRole<Database>(event),
     source: openDataSnapshotSource(),
+    gateway: configuredPushGateway(event),
     now: new Date(),
   })
   console.info('Tick', JSON.stringify(summary))

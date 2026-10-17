@@ -18,6 +18,7 @@ export async function useRouteWeight() {
   async function save(routeWeight: number): Promise<void> {
     if (!travellerId) throw new Error('No signed-in traveller')
     await saveRouteWeight(supabase, travellerId, routeWeight)
+    await resetLegReferences()
     data.value = routeWeight
   }
 

@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import type { Weekday } from '../../shared/domain/trip-template'
 import { addDays, parisDate } from '../../shared/utils/paris-time'
-import { saveTripTemplate, withLatestSnapshot, type FixtureTrain } from './support/snapshots'
+import { logImprovement, saveTripTemplate, withLatestSnapshot, type FixtureTrain } from './support/snapshots'
 import { inviteTraveller, removeTraveller, signInThroughTheApp } from './support/travellers'
 
 const parisLyonToPartDieu = { originCode: 'FRPLY', destinationCode: 'FRLPD' }
@@ -72,6 +72,49 @@ test('the home screen shows each tracked trip with the best candidate of each le
           await expect(half).toContainText('Rien pour l’instant')
         }
       })
+    })
+  }
+  finally {
+    await removeTraveller(email)
+  }
+})
+
+test('the home screen lists this morning’s improvements under « Nouveautés », each opening its leg', async ({ page, request }) => {
+  const today = parisDate(new Date())
+  const outboundDate = addDays(today, 3)
+  const returnDate = addDays(today, 5)
+  const best: FixtureTrain = { trainNumber: '9911', ...parisLyonToPartDieu, date: outboundDate, departureTime: '07:00', arrivalTime: '08:56', open: true }
+  const back: FixtureTrain = { trainNumber: '9981', ...partDieuToParisLyon, date: returnDate, departureTime: '17:04', arrivalTime: '19:00', open: true }
+
+  const email = `nouveautes-${Date.now()}@veille-max.test`
+  const travellerId = await inviteTraveller(email)
+  await saveTripTemplate(travellerId, {
+    outbound: { weekday: isoWeekday(outboundDate), anchor: 'arrival', window: { start: null, end: '10:00' }, idealTime: '09:00', routes: [parisLyonToPartDieu] },
+    return: { weekday: isoWeekday(returnDate), anchor: 'departure', window: { start: '14:00', end: null }, idealTime: '17:00', routes: [partDieuToParisLyon] },
+  })
+
+  try {
+    await withLatestSnapshot([best, back], async (snapshotId) => {
+      await signInThroughTheApp(page, request, email)
+      // The first trip's key, as the home screen links its legs.
+      const firstLeg = page.getByRole('region', { name: 'Vos week-ends' }).getByRole('link', { name: /^Aller/ }).first()
+      const tripKey = (await firstLeg.getAttribute('href'))!.split('/')[2]!
+      await logImprovement(travellerId, snapshotId, tripKey, 'outbound', 'new-best', best)
+      await logImprovement(travellerId, snapshotId, tripKey, 'return', 'first-candidate', back)
+      await page.reload()
+
+      await expect(page.getByRole('heading', { level: 1 })).toHaveText(/2 nouveaux trains\s*ce matin\./)
+      const news = page.getByRole('region', { name: 'Nouveautés' }).getByRole('listitem')
+      await expect(news).toHaveCount(2)
+      await expect(news.first()).toContainText('Aller')
+      await expect(news.first()).toContainText('Meilleur train')
+      await expect(news.first()).toContainText('07:00')
+      await expect(news.first()).toContainText('Paris Gare de Lyon → Lyon Part-Dieu')
+      await expect(news.nth(1)).toContainText('Premier train')
+
+      // Opened from the keyboard: a tap is thrown off by the page's horizontal scroll (issue 16).
+      await news.first().getByRole('link').press('Enter')
+      await expect(page).toHaveURL(new RegExp(`/trips/${tripKey}/outbound$`))
     })
   }
   finally {

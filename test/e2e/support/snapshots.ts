@@ -73,6 +73,25 @@ export async function recordSnapshot(trains: readonly FixtureTrain[]): Promise<n
   return (data as { snapshot_id: number }).snapshot_id
 }
 
+/** Logs that the tick notified `travellerId` of an improvement on a leg in snapshot `snapshotId`, as it does after ingesting it. */
+export async function logImprovement(travellerId: string, snapshotId: number, tripKey: string, legKind: 'outbound' | 'return', kind: 'first-candidate' | 'new-best' | 'better-than-booking', train: FixtureTrain): Promise<void> {
+  const { error } = await admin().from('notification_log').insert({
+    user_id: travellerId,
+    kind: 'improvement',
+    trip_key: tripKey,
+    leg_kind: legKind,
+    snapshot_id: snapshotId,
+    improvement_kind: kind,
+    travel_date: train.date,
+    train_number: train.trainNumber,
+    origin_code: train.originCode,
+    destination_code: train.destinationCode,
+    departure_time: train.departureTime,
+    arrival_time: train.arrivalTime,
+  })
+  expect(error).toBeNull()
+}
+
 /** Deletes a snapshot, and with it the observations and openings it created. */
 export async function removeSnapshot(snapshotId: number): Promise<void> {
   const { error } = await admin().from('snapshots').delete().eq('id', snapshotId)
@@ -101,15 +120,15 @@ async function lockLatestSnapshot(): Promise<void> {
 }
 
 /**
- * Runs `body` while a snapshot listing `trains` is the latest one, then
- * deletes it. No other test records a snapshot meanwhile.
+ * Runs `body` with the id of a snapshot listing `trains`, while it is the
+ * latest one, then deletes it. No other test records a snapshot meanwhile.
  */
-export async function withLatestSnapshot(trains: readonly FixtureTrain[], body: () => Promise<void>): Promise<void> {
+export async function withLatestSnapshot(trains: readonly FixtureTrain[], body: (snapshotId: number) => Promise<void>): Promise<void> {
   await lockLatestSnapshot()
   try {
     const snapshotId = await recordSnapshot(trains)
     try {
-      await body()
+      await body(snapshotId)
     }
     finally {
       await removeSnapshot(snapshotId)

@@ -42,7 +42,7 @@ export async function loadOpenTrains(
   }
 
   return rows
-    .map(row => ({ ...trainObservation(row), open: true }))
+    .map(row => ({ ...bookedTrainFromRow(row), open: true }))
     .filter(train => routes.some(route => sameRoute(route, train)))
 }
 
@@ -72,13 +72,15 @@ export async function loadTrainsOfDay(
   if (error) throw error
 
   return data
-    .map(row => ({ ...trainObservation(row), open: row.openings.length > 0 }))
+    .map(row => ({ ...bookedTrainFromRow(row), open: row.openings.length > 0 }))
     .filter(train => routes.some(route => sameRoute(route, train)))
 }
 
-type ObservationRow = Pick<Tables<'train_observations'>, 'travel_date' | 'train_number' | 'origin_code' | 'destination_code' | 'departure_time' | 'arrival_time'>
+/** The columns that identify a train and give its times, as every table naming a train has them. */
+export type TrainRow = Pick<Tables<'train_observations'>, 'travel_date' | 'train_number' | 'origin_code' | 'destination_code' | 'departure_time' | 'arrival_time'>
 
-function trainObservation(row: ObservationRow): BookedTrain {
+/** The train a row names, whether or not it has a seat. */
+export function bookedTrainFromRow(row: TrainRow): BookedTrain {
   return {
     date: row.travel_date,
     trainNumber: row.train_number,
