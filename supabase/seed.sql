@@ -22,3 +22,8 @@ values (
   '{"sub": "11111111-1111-4111-8111-111111111111", "email": "voyageur@veille-max.test", "email_verified": true}',
   'email', now(), now()
 );
+
+-- The invited traveller has been through onboarding (ticket 12): the tests land
+-- on the home screen. The onboarding test invites a traveller of its own.
+insert into public.traveller_settings (user_id, onboarding_step)
+values ('11111111-1111-4111-8111-111111111111', 'done');
