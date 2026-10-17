@@ -7,7 +7,7 @@ import { addDays, parisDate } from '#shared/utils/paris-time'
 import { loadLastSnapshot } from '#shared/utils/snapshot-store'
 import { loadRouteWeight } from '#shared/utils/traveller-settings-store'
 import { loadCustomisations, loadMutes } from '#shared/utils/trip-store'
-import { loadTripTemplate } from '#shared/utils/trip-template-store'
+import { loadStationNames, loadTripTemplate } from '#shared/utils/trip-template-store'
 import type { Database } from '#shared/types/database.types'
 
 export interface TravellerEvaluation {
@@ -70,7 +70,7 @@ export async function evaluateTraveller(client: SupabaseClient<Database>, travel
     trips,
     upcoming,
     activeBookings,
-    stationNames: await loadStationNames(client, [...trips, ...upcoming]),
+    stationNames: await loadStationNames(client, [...trips, ...upcoming].flatMap(trip => Object.values(trip.legs).flatMap(legStationCodes))),
     snapshotId: snapshot?.id ?? null,
     references,
     resets,
@@ -83,13 +83,4 @@ export async function evaluateTraveller(client: SupabaseClient<Database>, travel
 export function legStationCodes(leg: Leg): string[] {
   const trains = [...leg.candidates.map(({ train }) => train), ...(leg.booking ? [leg.booking.train] : [])]
   return [...leg.settings.routes, ...trains].flatMap(route => [route.originCode, route.destinationCode])
-}
-
-async function loadStationNames(client: SupabaseClient<Database>, trips: readonly Trip[]): Promise<Record<string, string>> {
-  const codes = new Set(trips.flatMap(trip => Object.values(trip.legs).flatMap(legStationCodes)))
-  if (codes.size === 0) return {}
-
-  const { data, error } = await client.from('stations').select('code, name').in('code', [...codes])
-  if (error) throw error
-  return Object.fromEntries(data.map(station => [station.code, station.name]))
 }

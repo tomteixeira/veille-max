@@ -1,12 +1,16 @@
 <!--
   « Notifications » in Réglages: notifications on the device in use, the
-  traveller's devices, and a test notification that proves the whole chain
-  works (ticket 09).
+  Confirmation Reminders, the traveller's devices, and a test notification
+  that proves the whole chain works (tickets 09 and 11).
 -->
 <script setup lang="ts">
 import { Laptop, Monitor, Smartphone, Tablet } from '@lucide/vue'
 
-const { devices, state, isThisDevice, thisDevice, turnOn, turnOff, sendTest } = await usePushNotifications()
+const [{ devices, state, isThisDevice, thisDevice, turnOn, turnOff, sendTest }, reminders] = await Promise.all([
+  usePushNotifications(),
+  useConfirmationReminders(),
+])
+const interactive = useInteractive()
 
 const titleId = useId()
 
@@ -31,6 +35,24 @@ async function toggle() {
 
 /** What the switch explains under its label, for each state of the device in use. */
 const hint = computed(() => notificationsBlocker(state.value, thisDevice.value) ?? 'Nouveaux trains, chaque matin.')
+
+const savingReminders = ref(false)
+const remindersFailed = ref(false)
+
+async function toggleReminders(enabled: boolean) {
+  savingReminders.value = true
+  remindersFailed.value = false
+  try {
+    await reminders.save(enabled)
+  }
+  catch (error) {
+    console.error('Confirmation reminders could not be switched', error)
+    remindersFailed.value = true
+  }
+  finally {
+    savingReminders.value = false
+  }
+}
 
 const testState = ref<'idle' | 'sending' | 'failed' | 'unreachable'>('idle')
 const delivered = ref<number | null>(null)
@@ -94,6 +116,22 @@ const dateFormat = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'sh
       class="mt-2 text-[13px] leading-snug font-semibold text-accent-ink"
     >
       Impossible de changer les notifications de {{ thisDevice }} pour l’instant. Réessayez dans un moment.
+    </p>
+
+    <AppSwitch
+      class="mt-4"
+      :model-value="reminders.enabled.value"
+      label="Rappel de confirmation"
+      hint="À midi la veille de chaque trajet réservé : confirmez-le sur MAX JEUNE avant 17:00, sinon SNCF l’annule."
+      :disabled="!interactive || savingReminders"
+      @update:model-value="toggleReminders"
+    />
+    <p
+      v-if="remindersFailed"
+      role="alert"
+      class="mt-2 text-[13px] leading-snug font-semibold text-accent-ink"
+    >
+      Impossible de changer le rappel de confirmation pour l’instant. Réessayez dans un moment.
     </p>
 
     <h3 class="mt-5 text-sm font-bold">

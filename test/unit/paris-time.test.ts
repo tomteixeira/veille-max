@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, formatParisLongDay, formatParisSnapshotTime, parisDate } from '#shared/utils/paris-time'
+import { addDays, formatParisLongDay, formatParisSnapshotTime, parisDate, parisTimeOfDay } from '#shared/utils/paris-time'
 
 describe('formatParisLongDay', () => {
   it('writes the day in French with a capitalised weekday', () => {
@@ -45,5 +45,13 @@ describe('formatParisSnapshotTime', () => {
 
   it('follows the switch to winter time', () => {
     expect(formatParisSnapshotTime(new Date('2026-11-02T05:24:00Z'))).toBe('2 novembre, 06:24')
+  })
+})
+
+describe('parisTimeOfDay', () => {
+  it('gives the Paris time of day of an instant, in summer and in winter time', () => {
+    expect(parisTimeOfDay(new Date('2026-10-22T10:05:00Z'))).toBe('12:05')
+    expect(parisTimeOfDay(new Date('2026-10-29T11:05:00Z'))).toBe('12:05')
+    expect(parisTimeOfDay(new Date('2026-10-15T22:00:00Z'))).toBe('00:00')
   })
 })

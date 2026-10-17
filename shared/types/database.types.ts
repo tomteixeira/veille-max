@@ -125,14 +125,14 @@ isOneToOne: false
                   ]
                 },"notification_log": {
                   Row: {
-                    "arrival_time": string | null,"departure_time": string | null,"destination_code": string | null,"id": number,"improvement_kind": string | null,"kind": Database["public"]['Enums']["notification_kind"],"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string | null,"sent_at": string,"snapshot_id": number | null,"train_number": string | null,"travel_date": string | null,"trip_key": string,"user_id": string
+                    "arrival_time": string | null,"departure_time": string | null,"destination_code": string | null,"id": number,"improvement_kind": string | null,"kind": Database["public"]['Enums']["notification_kind"],"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code": string | null,"reminder_date": string | null,"sent_at": string,"snapshot_id": number | null,"train_number": string | null,"travel_date": string | null,"trip_key": string,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "arrival_time"?: string | null,"departure_time"?: string | null,"destination_code"?: string | null,"id"?: never,"improvement_kind"?: string | null,"kind": Database["public"]['Enums']["notification_kind"],"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code"?: string | null,"sent_at"?: string,"snapshot_id"?: number | null,"train_number"?: string | null,"travel_date"?: string | null,"trip_key": string,"user_id": string
+                    "arrival_time"?: string | null,"departure_time"?: string | null,"destination_code"?: string | null,"id"?: never,"improvement_kind"?: string | null,"kind": Database["public"]['Enums']["notification_kind"],"leg_kind": Database["public"]['Enums']["leg_kind"],"origin_code"?: string | null,"reminder_date"?: string | null,"sent_at"?: string,"snapshot_id"?: number | null,"train_number"?: string | null,"travel_date"?: string | null,"trip_key": string,"user_id": string
                   }
                   Update: {
-                    "arrival_time"?: string | null,"departure_time"?: string | null,"destination_code"?: string | null,"id"?: never,"improvement_kind"?: string | null,"kind"?: Database["public"]['Enums']["notification_kind"],"leg_kind"?: Database["public"]['Enums']["leg_kind"],"origin_code"?: string | null,"sent_at"?: string,"snapshot_id"?: number | null,"train_number"?: string | null,"travel_date"?: string | null,"trip_key"?: string,"user_id"?: string
+                    "arrival_time"?: string | null,"departure_time"?: string | null,"destination_code"?: string | null,"id"?: never,"improvement_kind"?: string | null,"kind"?: Database["public"]['Enums']["notification_kind"],"leg_kind"?: Database["public"]['Enums']["leg_kind"],"origin_code"?: string | null,"reminder_date"?: string | null,"sent_at"?: string,"snapshot_id"?: number | null,"train_number"?: string | null,"travel_date"?: string | null,"trip_key"?: string,"user_id"?: string
                   }
                   Relationships: [
                     {
@@ -303,14 +303,14 @@ isOneToOne: false
                   ]
                 },"traveller_settings": {
                   Row: {
-                    "installed_at": string | null,"onboarding_step": string,"route_weight": number | null,"user_id": string
+                    "confirmation_reminders": boolean,"installed_at": string | null,"onboarding_step": string,"route_weight": number | null,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "installed_at"?: string | null,"onboarding_step"?: string,"route_weight"?: number | null,"user_id"?: string
+                    "confirmation_reminders"?: boolean,"installed_at"?: string | null,"onboarding_step"?: string,"route_weight"?: number | null,"user_id"?: string
                   }
                   Update: {
-                    "installed_at"?: string | null,"onboarding_step"?: string,"route_weight"?: number | null,"user_id"?: string
+                    "confirmation_reminders"?: boolean,"installed_at"?: string | null,"onboarding_step"?: string,"route_weight"?: number | null,"user_id"?: string
                   }
                   Relationships: [
                     
@@ -343,7 +343,7 @@ isOneToOne: false
                            }
           }
           Enums: {
-            "leg_kind": "outbound"|"return","notification_kind": "improvement","time_anchor": "departure"|"arrival"
+            "leg_kind": "outbound"|"return","notification_kind": "confirmation_reminder"|"improvement","time_anchor": "departure"|"arrival"
           }
           CompositeTypes: {
             [_ in never]: never
@@ -463,7 +463,7 @@ export const Constants = {
           }
         },"public": {
           Enums: {
-            "leg_kind": ["outbound", "return"],"notification_kind": ["improvement"],"time_anchor": ["departure", "arrival"]
+            "leg_kind": ["outbound", "return"],"notification_kind": ["confirmation_reminder", "improvement"],"time_anchor": ["departure", "arrival"]
           }
         }
 } as const
