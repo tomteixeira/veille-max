@@ -18,6 +18,31 @@ async function pickStation(sheet: Locator, field: string, search: string, statio
   await sheet.getByRole('listbox', { name: field }).getByRole('option', { name: station, exact: true }).click()
 }
 
+async function boxOf(locator: Locator) {
+  const box = await locator.boundingBox()
+  if (!box) throw new Error('not laid out')
+  return box
+}
+
+/**
+ * The trip's chips share the « Week-end » line, clear of « Modifier », and the
+ * trip's Aller half stays level with the next trip's, which has no chips.
+ */
+async function expectChipsBesideEyebrow(trip: Locator, chips: Locator[]) {
+  const eyebrow = await boxOf(trip.getByText('Week-end', { exact: true }))
+  const modify = await boxOf(trip.getByRole('link', { name: /^Modifier/ }))
+  for (const chip of chips) {
+    const box = await boxOf(chip)
+    expect(Math.abs((box.y + box.height / 2) - (eyebrow.y + eyebrow.height / 2))).toBeLessThan(2)
+    expect(box.x + box.width).toBeLessThanOrEqual(modify.x)
+  }
+
+  const weekends = trip.page().getByRole('region', { name: 'Vos week-ends' }).getByRole('article')
+  const outbound = await boxOf(trip.getByRole('region', { name: /^Aller/ }))
+  const neighbourOutbound = await boxOf(weekends.nth(1).getByRole('region', { name: /^Aller/ }))
+  expect(Math.abs(outbound.y - neighbourOutbound.y)).toBeLessThan(1)
+}
+
 // A traveller of its own, since it has a trip template: it starts signed out.
 test.use({ storageState: { cookies: [], origins: [] } })
 
@@ -83,6 +108,25 @@ test('a traveller customises a trip to another destination, mutes a leg, then re
         await expect(firstTrip).toContainText('Personnalisé')
         await expect(outboundHalf).toContainText('06:07')
         await expect(outboundHalf).toContainText('Paris Gare de Lyon → Marseille St-Charles')
+      })
+
+      await test.step('« Personnalisé » sits beside « Week-end », so the ticket stays aligned with its neighbour', async () => {
+        await expectChipsBesideEyebrow(firstTrip, [firstTrip.getByText('Personnalisé')])
+      })
+
+      await test.step('a muted trip shows « En sourdine » as an icon, so both chips fit beside « Week-end »', async () => {
+        await firstTrip.getByRole('link', { name: /^Modifier/ }).click()
+        const muteTrip = page.getByRole('switch', { name: 'Mettre le week-end en sourdine' })
+        await muteTrip.click()
+        await expect(muteTrip).toHaveAttribute('aria-checked', 'true')
+        await page.getByRole('link', { name: 'Retour à l’accueil' }).click()
+
+        await expectChipsBesideEyebrow(firstTrip, [firstTrip.getByText('Personnalisé'), firstTrip.getByRole('img', { name: 'En sourdine' })])
+
+        await firstTrip.getByRole('link', { name: /^Modifier/ }).click()
+        await muteTrip.click()
+        await expect(muteTrip).toHaveAttribute('aria-checked', 'false')
+        await page.getByRole('link', { name: 'Retour à l’accueil' }).click()
       })
 
       await test.step('a muted return leg keeps its candidate, « En sourdine »', async () => {
