@@ -4,7 +4,7 @@ Veille MAX tracks MAX JEUNE seat availability on a traveller's preferred routes.
 
 > Veille MAX is not affiliated with SNCF Voyageurs or SNCF Connect. Availability comes from the SNCF open data (`tgvmax` dataset, ODbL licence).
 
-**Status:** walking skeleton, sign-in, the trip template and the daily snapshot ingestion. The app shell, email-code sign-in, the default configuration in Réglages (« Votre week-end type »), the morning ingestion of the SNCF snapshot, the local Supabase stack and the CI pipeline are in place; features land ticket by ticket (see [the v1 spec](.scratch/veille-max-v1/spec.md) and [its tickets](.scratch/veille-max-v1/issues/)).
+**Status:** walking skeleton, sign-in, the trip template and the daily snapshot ingestion. The app shell, email-code and Google sign-in, the default configuration in Réglages (« Votre week-end type »), the morning ingestion of the SNCF snapshot, the local Supabase stack and the CI pipeline are in place; features land ticket by ticket (see [the v1 spec](.scratch/veille-max-v1/spec.md) and [its tickets](.scratch/veille-max-v1/issues/)).
 
 ## Stack
 
@@ -116,7 +116,13 @@ curl -X POST -H "x-tick-secret: $NUXT_TICK_SECRET" http://localhost:3000/api/cro
 - Travellers sign in with a 6-digit code sent by email (Supabase email OTP) and typed in the app. There are no magic links: from Mail, a link would open in Safari, whose storage is separate from the installed app. The email template is [`supabase/templates/sign-in-code.html`](supabase/templates/sign-in-code.html).
 - Sign-ups are closed (`enable_signup = false` in [`supabase/config.toml`](supabase/config.toml)), and the app asks for a code with `shouldCreateUser: false`. Requesting a code never creates a user. An unknown address gets a neutral refusal.
 - **To invite a traveller**, use the Supabase dashboard: Authentication → Users → Add user → Create new user, with « Auto Confirm User » ticked (the password is never used). « Send invitation » also works, but the traveller must open the invitation link once before asking for a code. Until then, Supabase refuses the address like an unknown one.
-- Every page except `/login` requires a signed-in traveller. A signed-out visit goes to `/login`, then back to the page it asked for.
+- « Continuer avec Google » signs an invited traveller in with the Google account of their invitation address. It is a full-page redirect (no popup) with PKCE: `/login` leaves for Supabase, which sends the traveller to Google, then back to [`/confirm`](app/pages/confirm.vue), inside the manifest scope. From the installed iPhone app, Google opens in an in-app sheet that returns to the app at that point. Supabase links the Google identity to the existing account with the same address. Sign-ups stay closed, so a Google account with any other address is refused (« Ce compte Google n’a pas accès à Veille MAX »), and no account is created. There is no Sign in with Apple.
+- **To set up Google sign-in** (once per environment; no secret goes in the repo):
+  1. [Google Auth Platform](https://console.cloud.google.com/auth/overview): in a Google Cloud project, configure the Branding (app name « Veille MAX », support email) and the Audience (External). Basic scopes (`openid`, email, profile) need no verification. Testing mode only lets in the test users you list there; publish the app to let in any invited traveller. Google deletes a client that has not been used for 6 months.
+  2. Clients → Create client → Web application. Authorised JavaScript origins: the production URL (and `http://localhost:3000` for local work). Authorised redirect URIs: Supabase's callback, not the app's: `https://<project-ref>.supabase.co/auth/v1/callback` for the hosted project, `http://127.0.0.1:56321/auth/v1/callback` for the local stack. Note the client ID and secret.
+  3. Hosted Supabase: Authentication → Sign In / Providers → Google: turn it on and paste the client ID and secret. Authentication → URL Configuration → Redirect URLs: add `https://<your-domain>/confirm` (and `https://*-<team>.vercel.app/confirm` to sign in on preview deployments). Supabase sends the traveller to the Site URL instead of an address missing from this list.
+  4. Local stack: [`supabase/config.toml`](supabase/config.toml) already turns Google on and allows `/confirm` on any local port. To sign in with a real Google account, put `SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID` and `SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET` in `supabase/.env` (git-ignored) and restart the stack. Without them, the button still leaves for Google, which refuses the made-up client: enough for the Playwright tests, which stop at the redirect.
+- Every page except `/login` and `/confirm` requires a signed-in traveller. A signed-out visit goes to `/login`, then back to the page it asked for, with either way of signing in.
 - The session lasts: the auth cookies are kept 400 days, the longest browsers allow, and Supabase refresh tokens do not expire. « Se déconnecter » in Réglages signs out this device only.
 
 ## Environment variables
@@ -148,7 +154,8 @@ One-time setup:
 1. **Supabase:** create the hosted project. Note its reference and database password, and create a personal access token. Then mirror the local Auth settings of `supabase/config.toml` in the dashboard, since migrations do not carry them:
    - Authentication → Sign In / Providers: turn « Allow new users to sign up » off and keep the Email provider on, with a 6-digit email OTP.
    - Authentication → Emails → Templates → « Magic Link »: subject « Votre code Veille MAX », body copied from [`supabase/templates/sign-in-code.html`](supabase/templates/sign-in-code.html).
-   - Authentication → URL Configuration: the Site URL is the production URL.
+   - Authentication → URL Configuration: the Site URL is the production URL, and the Redirect URLs list `https://<your-domain>/confirm`.
+   - Authentication → Sign In / Providers → Google: on, with the client of « To set up Google sign-in » ([Sign-in](#sign-in)).
    - Authentication → Emails → SMTP Settings: Supabase's built-in email service only delivers to the organisation's team members, a few emails per hour. Set up a custom SMTP server before inviting anyone else.
 2. **GitHub:** add the `SUPABASE_ACCESS_TOKEN` and `SUPABASE_DB_PASSWORD` secrets and the `SUPABASE_PROJECT_ID` variable. The next push to `main` applies the migrations; you can also run the "Database migrations" workflow by hand.
 3. **Vercel:** import the GitHub repository. Vercel detects Nuxt and builds with the `vercel` Nitro preset on its own, on Node.js 24 (from `engines` in `package.json`). Add the three app variables to the Production and Preview environments.
