@@ -17,9 +17,20 @@ const title = computed(() => tripTitle(props.trip))
   >
     <div class="flex items-start justify-between gap-2 px-5 pt-5">
       <div>
-        <p class="eyebrow">
-          Week-end
-        </p>
+        <!--
+          The chips borrow the eyebrow's line, so every ticket of the carousel keeps the same header height.
+          A chip is taller than that line: `-my-2` keeps it from growing the line.
+        -->
+        <div class="flex items-center gap-2">
+          <p class="eyebrow">
+            Week-end
+          </p>
+          <TripChips
+            :trip="trip"
+            compact
+            class="-my-2"
+          />
+        </div>
         <h2
           :id="headingId"
           class="mt-0.5 text-xl font-extrabold tracking-tight"
@@ -34,10 +45,6 @@ const title = computed(() => tripTitle(props.trip))
         Modifier<span class="sr-only"> le week-end du {{ title }}</span>
       </NuxtLink>
     </div>
-    <TripChips
-      :trip="trip"
-      class="px-5 pt-2"
-    />
     <template
       v-for="(kind, index) in LEG_KINDS"
       :key="kind"
