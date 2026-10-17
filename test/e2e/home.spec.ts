@@ -112,8 +112,7 @@ test('the home screen lists this morning’s improvements under « Nouveautés �
       await expect(news.first()).toContainText('Paris Gare de Lyon → Lyon Part-Dieu')
       await expect(news.nth(1)).toContainText('Premier train')
 
-      // Opened from the keyboard: a tap is thrown off by the page's horizontal scroll (issue 16).
-      await news.first().getByRole('link').press('Enter')
+      await news.first().getByRole('link').click()
       await expect(page).toHaveURL(new RegExp(`/trips/${tripKey}/outbound$`))
     })
   }

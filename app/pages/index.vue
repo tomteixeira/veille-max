@@ -95,7 +95,8 @@ const steps = [
       class="mt-7"
       aria-label="Vos week-ends"
     >
-      <div class="no-scrollbar flex snap-x snap-mandatory scroll-px-6 gap-4 overflow-x-auto px-6 pb-4">
+      <!-- Keep absolutely positioned screen-reader text inside the carousel’s scroll bounds. -->
+      <div class="no-scrollbar relative flex snap-x snap-mandatory scroll-px-6 gap-4 overflow-x-auto overscroll-x-contain px-6 pb-4">
         <TripTicket
           v-for="trip in trips"
           :key="trip.key"

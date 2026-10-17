@@ -135,6 +135,12 @@
 }
 
 @layer base {
+  /* Clip sideways overflow without creating a scroll container for sticky content. */
+  html,
+  body {
+    overflow-x: clip;
+  }
+
   html {
     background-color: var(--vm-canvas);
     color: var(--vm-ink);
