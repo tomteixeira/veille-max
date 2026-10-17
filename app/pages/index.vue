@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowRight, BellRing, Route, Sunrise } from '@lucide/vue'
+import { ArrowRight, BellRing, ChevronRight, Route, Sparkles, Sunrise } from '@lucide/vue'
 import { MAX_ACTIVE_BOOKINGS } from '#shared/domain/evaluation'
 
 useHead({ title: 'Accueil' })
@@ -10,9 +10,12 @@ const [lastSnapshot, { data: home }] = await Promise.all([useLastSnapshotTime(),
 
 const trips = computed(() => home.value?.trips ?? [])
 const upcoming = computed(() => home.value?.upcoming ?? [])
-const headline = computed(() => home.value?.hasRoutes
-  ? { title: `${trips.value.length} week-end${trips.value.length > 1 ? 's' : ''}`, accent: 'sous surveillance.' }
-  : { title: 'Rien à surveiller', accent: 'pour l’instant.' })
+const news = computed(() => home.value?.news ?? [])
+const headline = computed(() => {
+  if (!home.value?.hasRoutes) return { title: 'Rien à surveiller', accent: 'pour l’instant.' }
+  if (news.value.length > 0) return { title: newTrainsText(news.value.length), accent: 'ce matin.' }
+  return { title: `${trips.value.length} week-end${trips.value.length > 1 ? 's' : ''}`, accent: 'sous surveillance.' }
+})
 
 /** A station's full name; its code if the station reference does not know it. */
 function stationName(code: string): string {
@@ -88,6 +91,61 @@ const steps = [
           class="w-[302px] shrink-0 snap-start"
         />
       </div>
+    </section>
+
+    <section
+      v-if="news.length > 0"
+      class="mt-6 px-6"
+      aria-labelledby="news-title"
+    >
+      <h2
+        id="news-title"
+        class="text-base font-extrabold tracking-tight"
+      >
+        Nouveautés
+      </h2>
+      <ul class="mt-3 divide-y divide-line rounded-card bg-surface">
+        <li
+          v-for="item in news"
+          :key="`${item.tripKey}-${item.legKind}`"
+        >
+          <NuxtLink
+            :to="`/trips/${item.tripKey}/${item.legKind}`"
+            class="flex items-center gap-4 px-5 py-4"
+          >
+            <span class="grid size-10 shrink-0 place-items-center rounded-control bg-accent-soft text-accent-ink">
+              <Sparkles
+                :size="18"
+                :stroke-width="2"
+                aria-hidden="true"
+              />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center justify-between gap-2">
+                <span class="eyebrow truncate">{{ LEG_NAMES[item.legKind] }} · {{ shortDay(item.date) }}</span>
+                <AppChip
+                  tone="accent"
+                  class="shrink-0"
+                >
+                  {{ IMPROVEMENT_NAMES[item.kind] }}
+                </AppChip>
+              </span>
+              <span class="tnum mt-0.5 block text-xl leading-tight font-extrabold tracking-tight">
+                {{ item.train.departureTime }} <span
+                  class="text-ink-faint"
+                  aria-label="à"
+                >→</span> {{ item.train.arrivalTime }}
+              </span>
+              <span class="block truncate text-xs font-medium text-ink-muted">{{ routeName(item.train, stationName) }}</span>
+            </span>
+            <ChevronRight
+              :size="18"
+              class="shrink-0 text-ink-faint"
+              aria-hidden="true"
+            />
+          </NuxtLink>
+        </li>
+      </ul>
     </section>
 
     <section

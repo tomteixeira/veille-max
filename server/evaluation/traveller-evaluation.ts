@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { evaluate, TRACKING_HORIZON_DAYS, type Leg, type Trip, type UpcomingTrip } from '#shared/domain/evaluation'
+import { evaluate, TRACKING_HORIZON_DAYS, type Improvement, type Leg, type LegReference, type Trip, type UpcomingTrip } from '#shared/domain/evaluation'
 import { loadBookings } from '#shared/utils/booking-store'
+import { loadLegReferences } from '#shared/utils/leg-reference-store'
 import { loadOpenTrains } from '#shared/utils/observation-store'
 import { addDays, parisDate } from '#shared/utils/paris-time'
 import { loadLastSnapshot } from '#shared/utils/snapshot-store'
@@ -22,6 +23,16 @@ export interface TravellerEvaluation {
   activeBookings: number
   /** The full name of every station the trips' routes and candidates use, by code. */
   stationNames: Record<string, string>
+  /** The latest snapshot, `null` before the first one. */
+  snapshotId: number | null
+  /** Every tracked leg's best candidate in the latest snapshot: the references to store once it is evaluated. */
+  references: LegReference[]
+  /** The references of the legs whose stored one is missing or was ranked with other settings: those a settings change resets. */
+  resets: LegReference[]
+  /** Whether any reference was stored for the traveller before: `false` until their first evaluation. */
+  evaluatedBefore: boolean
+  /** The legs whose best candidate improves on their stored reference, muted ones aside. */
+  improvements: Improvement[]
 }
 
 /**
@@ -30,12 +41,13 @@ export interface TravellerEvaluation {
  * is the traveller's own client, so RLS limits it to their rows.
  */
 export async function evaluateTraveller(client: SupabaseClient<Database>, travellerId: string, now: Date): Promise<TravellerEvaluation> {
-  const [template, routeWeight, customisations, mutes, bookings, snapshot] = await Promise.all([
+  const [template, routeWeight, customisations, mutes, bookings, previousReferences, snapshot] = await Promise.all([
     loadTripTemplate(client, travellerId),
     loadRouteWeight(client, travellerId),
     loadCustomisations(client, travellerId),
     loadMutes(client, travellerId),
     loadBookings(client, travellerId),
+    loadLegReferences(client, travellerId),
     loadLastSnapshot(client),
   ])
   const templateRoutes = [...template.outbound.routes, ...template.return.routes]
@@ -45,7 +57,12 @@ export async function evaluateTraveller(client: SupabaseClient<Database>, travel
   const observations = snapshot
     ? await loadOpenTrains(client, snapshot.id, [...templateRoutes, ...customisedRoutes], { from: today, to: addDays(today, TRACKING_HORIZON_DAYS) })
     : []
-  const { trips, upcoming, activeBookings } = evaluate({ now, settings: { template, routeWeight, customisations, mutes, bookings }, observations })
+  const { trips, upcoming, activeBookings, references, resets, improvements } = evaluate({
+    now,
+    settings: { template, routeWeight, customisations, mutes, bookings },
+    observations,
+    references: previousReferences,
+  })
 
   return {
     routeWeight,
@@ -54,6 +71,11 @@ export async function evaluateTraveller(client: SupabaseClient<Database>, travel
     upcoming,
     activeBookings,
     stationNames: await loadStationNames(client, [...trips, ...upcoming]),
+    snapshotId: snapshot?.id ?? null,
+    references,
+    resets,
+    evaluatedBefore: previousReferences.length > 0,
+    improvements,
   }
 }
 

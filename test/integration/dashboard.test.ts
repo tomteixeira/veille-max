@@ -68,7 +68,7 @@ describe('dashboard: when seats come out', () => {
     const fixture = fixtureSnapshotSource(mornings[0]!.snapshot)
     for (const { snapshot, tick } of mornings) {
       fixture.publish(snapshot)
-      await runTick({ db: admin, source: fixture.source, now: tick })
+      await runTick({ db: admin, source: fixture.source, gateway: null, now: tick })
     }
   })
 
