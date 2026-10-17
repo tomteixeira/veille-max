@@ -77,6 +77,7 @@ describe('snapshot ingestion through the tick', () => {
       ingested: true,
       snapshotId: expect.any(Number),
       counts: { trains: 3, openTrains: 2, openingsOpened: 2, openingsKept: 0, openingsClosed: 0 },
+      improvements: null,
       reminders: 0,
     })
     const s1 = summary.snapshotId
@@ -135,7 +136,7 @@ describe('snapshot ingestion through the tick', () => {
     fixture.publish({ processedAt: friday.processedAt, trains: [morning6603(false), evening6680(false)] })
     const again = await runTick({ db: admin, source: fixture.source, gateway: null, now: new Date('2026-10-16T04:45:00Z') })
 
-    expect(again).toEqual({ ingested: false, snapshotId: first.snapshotId, counts: null, reminders: 0 })
+    expect(again).toEqual({ ingested: false, snapshotId: first.snapshotId, counts: null, improvements: null, reminders: 0 })
     expect(fixture.exports).toHaveLength(1)
     expect({ observations: await observations(), openings: await openings() }).toEqual(before)
     const { count } = await admin.from('snapshots').select('*', { count: 'exact', head: true })

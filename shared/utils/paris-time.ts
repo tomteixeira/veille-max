@@ -41,6 +41,15 @@ export function addDays(date: ParisDate, days: number): ParisDate {
   return day.toISOString().slice(0, 10)
 }
 
+// Calendar days are formatted at UTC midnight, where they never shift.
+const calendarDayFormat = new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' })
+
+/** « Vendredi 23 octobre »: a calendar day in full, as a leg view or a notification names it. */
+export function longDayName(date: ParisDate): string {
+  const text = calendarDayFormat.format(new Date(`${date}T00:00:00Z`))
+  return `${text.charAt(0).toUpperCase()}${text.slice(1)}`
+}
+
 const snapshotTimeFormat = new Intl.DateTimeFormat('fr-FR', {
   timeZone: PARIS_TIME_ZONE,
   day: 'numeric',
