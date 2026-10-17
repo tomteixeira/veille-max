@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { DeclaredBooking } from '../domain/booking-habits'
 import type { Booking } from '../domain/evaluation'
 import type { LegKind } from '../domain/trip-template'
 import type { Database } from '../types/database.types'
@@ -10,17 +11,17 @@ import { bookedTrainFromRow } from './observation-store'
 
 type Client = SupabaseClient<Database>
 
-const BOOKING_COLUMNS = 'user_id, trip_key, leg_kind, travel_date, train_number, origin_code, destination_code, train_observations!inner (departure_time, arrival_time)'
+const BOOKING_COLUMNS = 'user_id, trip_key, leg_kind, booked_at, travel_date, train_number, origin_code, destination_code, train_observations!inner (departure_time, arrival_time)'
 
 /** Every booking of `travellerId`, with the booked trains' latest times. */
-export async function loadBookings(client: Client, travellerId: string): Promise<Booking[]> {
+export async function loadBookings(client: Client, travellerId: string): Promise<DeclaredBooking[]> {
   const { data, error } = await client.from('bookings').select(BOOKING_COLUMNS).eq('user_id', travellerId).order('travel_date')
   if (error) throw error
   return data.map(toBooking)
 }
 
 /** A traveller's booking. */
-export interface TravellerBooking extends Booking {
+export interface TravellerBooking extends DeclaredBooking {
   travellerId: string
 }
 
@@ -33,6 +34,7 @@ export async function loadBookingsOn(client: Client, date: ParisDate): Promise<T
 
 type BookingRow = {
   trip_key: string
+  booked_at: string
   leg_kind: LegKind
   travel_date: string
   train_number: string
@@ -41,12 +43,13 @@ type BookingRow = {
   train_observations: { departure_time: string, arrival_time: string }
 }
 
-function toBooking(row: BookingRow): Booking {
+function toBooking(row: BookingRow): DeclaredBooking {
   return {
     tripKey: row.trip_key,
     legKind: row.leg_kind,
     // The booked train's latest times are its observation's.
     train: bookedTrainFromRow({ ...row, ...row.train_observations }),
+    declaredAt: new Date(row.booked_at),
   }
 }
 

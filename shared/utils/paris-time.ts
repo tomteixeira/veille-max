@@ -41,6 +41,12 @@ export function addDays(date: ParisDate, days: number): ParisDate {
   return day.toISOString().slice(0, 10)
 }
 
+/** How many calendar days from `from` to `to`: negative when `to` comes first. */
+export function daysBetween(from: ParisDate, to: ParisDate): number {
+  // Both at UTC midnight, where every day lasts 24 hours.
+  return Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / (24 * 3600 * 1000))
+}
+
 // Calendar days are formatted at UTC midnight, where they never shift.
 const calendarDayFormat = new Intl.DateTimeFormat('fr-FR', { timeZone: 'UTC', weekday: 'long', day: 'numeric', month: 'long' })
 

@@ -88,6 +88,11 @@ export interface EvaluationInput {
    * reference was stored is told nothing, as after a reset.
    */
   references?: readonly LegReference[]
+  /**
+   * The first day of the archived trips to return: those whose legs have all
+   * passed, one of them on or after that day. None when it is not set.
+   */
+  archivedSince?: ParisDate
 }
 
 /** A train with an open seat on one of a leg's routes, on the leg's date, in the latest snapshot. */
@@ -177,6 +182,8 @@ export interface Evaluation {
   trips: Trip[]
   /** The next trips beyond the tracking horizon, soonest first. */
   upcoming: UpcomingTrip[]
+  /** The trips whose legs have all passed, since `EvaluationInput.archivedSince`, soonest first: kept, never notified. */
+  archived: Trip[]
   /** How many bookings are held for legs that have not passed, against `MAX_ACTIVE_BOOKINGS`. */
   activeBookings: number
   /** The new reference of every tracked leg that has not passed, muted or not: its best candidate now. */
@@ -191,7 +198,7 @@ export interface Evaluation {
   improvements: Improvement[]
 }
 
-export function evaluate({ now, settings, observations, references: previousReferences = [] }: EvaluationInput): Evaluation {
+export function evaluate({ now, settings, observations, references: previousReferences = [], archivedSince }: EvaluationInput): Evaluation {
   const today = parisDate(now)
   const horizonEnd = addDays(today, TRACKING_HORIZON_DAYS)
   const { template, customisations = {}, mutes = [] } = settings
@@ -207,12 +214,16 @@ export function evaluate({ now, settings, observations, references: previousRefe
 
   const trips: Trip[] = []
   const upcoming: UpcomingTrip[] = []
+  const archived: Trip[] = []
   const references: LegReference[] = []
   const resets: LegReference[] = []
   const improvements: Improvement[] = []
   // The template's outbound weekday two weeks before today's, so that a trip
   // whose return leg was moved later is still found, then every week after it.
-  let outboundDate = addDays(today, template.outbound.weekday - weekday(today) - 14)
+  // A week before the first archived day's for archived trips, for the same reason.
+  const firstWeek = (day: ParisDate, weeksBefore: number) => addDays(day, template.outbound.weekday - weekday(day) - 7 * weeksBefore)
+  let outboundDate = firstWeek(today, 2)
+  if (archivedSince !== undefined && archivedSince < today) outboundDate = [outboundDate, firstWeek(archivedSince, 1)].sort()[0]!
   for (; upcoming.length < UPCOMING_TRIP_COUNT; outboundDate = addDays(outboundDate, 7)) {
     const key = isoWeek(outboundDate)
     const customisation = customisations[key]
@@ -221,12 +232,15 @@ export function evaluate({ now, settings, observations, references: previousRefe
       return: { ...legSettings(template.return), date: addDays(outboundDate, returnOffset) },
     }
     const [firstDate, lastDate] = [legs.outbound.date, legs.return.date].sort() as [ParisDate, ParisDate]
-    // Archived once every leg has passed.
-    if (lastDate < today) continue
-
     const muted = isMuted(key)
     const evaluated = (kind: LegKind) => evaluateLeg(kind, legs[kind], muted || isMuted(key, kind), today, routeWeight, observations, bookingOf(key, kind))
     const trip: Trip = { key, customised: customisation !== undefined, muted, legs: { outbound: evaluated('outbound'), return: evaluated('return') } }
+
+    // Archived once every leg has passed.
+    if (lastDate < today) {
+      if (archivedSince !== undefined && lastDate >= archivedSince) archived.push(trip)
+      continue
+    }
 
     // Tracked as soon as its first leg enters the horizon.
     if (firstDate > horizonEnd) {
@@ -250,8 +264,8 @@ export function evaluate({ now, settings, observations, references: previousRefe
   }
   // Customised dates can put a trip before the one of the previous week.
   const soonestFirst = (a: Trip, b: Trip) => firstLegDate(a).localeCompare(firstLegDate(b))
-  const activeBookings = bookings.filter(booking => booking.train.date >= today).length
-  return { trips: trips.sort(soonestFirst), upcoming: upcoming.sort(soonestFirst), activeBookings, references, resets, improvements }
+  const activeBookings = bookings.filter(booking => isActiveBooking(booking, today)).length
+  return { trips: trips.sort(soonestFirst), upcoming: upcoming.sort(soonestFirst), archived: archived.sort(soonestFirst), activeBookings, references, resets, improvements }
 }
 
 /** What ranks a leg's candidates: its date, anchor, window, ideal time and ranked routes, and the route weight. */
@@ -338,19 +352,32 @@ function evaluateLeg(
     return { kind, date, settings, muted, status: 'past', candidates: [], best: null, booking }
   }
 
-  const candidates: Candidate[] = []
-  for (const train of observations) {
-    if (!train.open || train.date !== date) continue
-    const routeRank = routeRankOf(train, settings)
-    if (routeRank !== null) candidates.push({ train, routeRank, ...timeRanking(train, settings) })
-  }
-  candidates.sort((a, b) => compareCandidates(a, b, routeWeight))
+  const candidates = rankCandidates(observations, date, settings, routeWeight)
   const best = candidates[0] ?? null
   const booking = bookedTrain && rankedBooking(bookedTrain, date, settings, candidates, routeWeight)
 
   let status: LegStatus = best === null ? 'none' : best.inWindow ? 'available' : 'outside-window'
   if (booking) status = 'booked'
   return { kind, date, settings, muted, status, candidates, best, booking }
+}
+
+/**
+ * The candidates of a leg on `date` among `observations`, in ranking order:
+ * the trains with an open seat on one of its routes, on that date.
+ */
+export function rankCandidates(observations: readonly TrainObservation[], date: ParisDate, settings: LegSettings, routeWeight: number): Candidate[] {
+  const candidates: Candidate[] = []
+  for (const train of observations) {
+    if (!train.open || train.date !== date) continue
+    const routeRank = routeRankOf(train, settings)
+    if (routeRank !== null) candidates.push({ train, routeRank, ...timeRanking(train, settings) })
+  }
+  return candidates.sort((a, b) => compareCandidates(a, b, routeWeight))
+}
+
+/** Whether a booking counts against `MAX_ACTIVE_BOOKINGS` on `today`: until its leg has passed. */
+export function isActiveBooking({ train }: Booking, today: ParisDate): boolean {
+  return train.date >= today
 }
 
 /** Whether two routes join the same origin and destination stations. */

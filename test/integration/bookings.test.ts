@@ -15,6 +15,11 @@ function booking(legKind: 'outbound' | 'return', train: BookedTrain): Booking {
   return { tripKey: '2026-W45', legKind, train }
 }
 
+/** A booking as it is loaded back: with when it was declared. */
+function declared(legKind: 'outbound' | 'return', train: BookedTrain) {
+  return { ...booking(legKind, train), declaredAt: expect.any(Date) }
+}
+
 describe('booking storage', () => {
   let traveller: Traveller
   let other: Traveller
@@ -49,20 +54,29 @@ describe('booking storage', () => {
   it('keeps a declared booking with the booked train’s times, whether or not it still shows a seat', async () => {
     await saveBooking(traveller.client, traveller.id, booking('outbound', morningTrain))
 
-    expect(await loadBookings(traveller.client, traveller.id)).toEqual([booking('outbound', morningTrain)])
+    expect(await loadBookings(traveller.client, traveller.id)).toEqual([declared('outbound', morningTrain)])
   })
 
   it('holds at most one booking per leg: declaring a new one replaces it', async () => {
     await saveBooking(traveller.client, traveller.id, booking('outbound', earlyTrain))
     await saveBooking(traveller.client, traveller.id, booking('return', sundayTrain))
 
-    expect(await loadBookings(traveller.client, traveller.id)).toEqual([booking('outbound', earlyTrain), booking('return', sundayTrain)])
+    expect(await loadBookings(traveller.client, traveller.id)).toEqual([declared('outbound', earlyTrain), declared('return', sundayTrain)])
+  })
+
+  it('dates a booking from when it was last declared', async () => {
+    const before = Date.now()
+    await saveBooking(traveller.client, traveller.id, booking('return', sundayTrain))
+
+    const [, sunday] = await loadBookings(traveller.client, traveller.id)
+    // Within a few seconds, whatever the clocks of the test runner and the database.
+    expect(Math.abs(sunday!.declaredAt.getTime() - before)).toBeLessThan(5_000)
   })
 
   it('cancels the booking of one leg', async () => {
     await cancelBooking(traveller.client, traveller.id, '2026-W45', 'outbound')
 
-    expect(await loadBookings(traveller.client, traveller.id)).toEqual([booking('return', sundayTrain)])
+    expect(await loadBookings(traveller.client, traveller.id)).toEqual([declared('return', sundayTrain)])
   })
 
   it('refuses a train the snapshots never listed', async () => {
@@ -76,7 +90,7 @@ describe('booking storage', () => {
     await expect(saveBooking(other.client, traveller.id, booking('outbound', earlyTrain))).rejects.toMatchObject({ code: INSUFFICIENT_PRIVILEGE })
     await cancelBooking(other.client, traveller.id, '2026-W45', 'return')
 
-    expect(await loadBookings(traveller.client, traveller.id)).toEqual([booking('return', sundayTrain)])
+    expect(await loadBookings(traveller.client, traveller.id)).toEqual([declared('return', sundayTrain)])
   })
 
   it('refuses a signed-out visitor', async () => {

@@ -16,6 +16,7 @@ const emptyText = computed(() => emptyHistoryText(dashboard.value?.since ?? null
 const curveTitle = computed(() => dashboard.value && curveHeadline(dashboard.value.curve.peaks))
 const slotTitle = computed(() => dashboard.value && slotHeadline(dashboard.value.slots))
 const lifetimeTitle = computed(() => dashboard.value && lifetimeHeadline(dashboard.value.lifetimes))
+const activeBookings = computed(() => dashboard.value?.bookings.active ?? 0)
 
 // Decorative silhouette of the opening curve, shown until real history exists.
 const ghostBarHeights = [36, 52, 68, 44, 28, 24, 20, 24, 18, 16, 20, 28, 48, 60, 40, 24, 18, 16, 20, 24, 32, 44, 56, 36, 20]
@@ -47,28 +48,53 @@ const ghostBarHeights = [36, 52, 68, 44, 28, 24, 20, 24, 18, 16, 20, 28, 48, 60,
     </PageHeader>
 
     <div class="mt-5 space-y-4 px-6">
-      <SurfaceCard class="flex items-center gap-5">
-        <p class="tnum text-[52px] leading-none font-extrabold tracking-tight">
-          0<span class="text-ink-faint">/{{ MAX_ACTIVE_BOOKINGS }}</span>
-        </p>
-        <div>
-          <p class="text-sm font-bold">
-            trajets réservés en ce moment
+      <SurfaceCard
+        as="section"
+        aria-label="Réservations"
+      >
+        <div class="flex items-center gap-5">
+          <p class="tnum shrink-0 text-[52px] leading-none font-extrabold tracking-tight">
+            {{ activeBookings }}<span class="text-ink-faint">/{{ MAX_ACTIVE_BOOKINGS }}</span>
           </p>
-          <div
-            class="mt-2 flex gap-1.5"
-            aria-hidden="true"
-          >
-            <span
-              v-for="slot in MAX_ACTIVE_BOOKINGS"
-              :key="slot"
-              class="size-2.5 rounded-full bg-line"
-            />
+          <div>
+            <p class="text-sm font-bold">
+              {{ bookedTripsText(activeBookings) }}
+            </p>
+            <div
+              class="mt-2 flex gap-1.5"
+              aria-hidden="true"
+            >
+              <span
+                v-for="slot in MAX_ACTIVE_BOOKINGS"
+                :key="slot"
+                class="size-2.5 rounded-full"
+                :class="slot <= activeBookings ? 'bg-booked' : 'bg-line'"
+              />
+            </div>
+            <p class="mt-2 text-xs font-medium text-ink-muted">
+              {{ bookingPaceText(dashboard?.bookings.averageDaysBefore ?? null) }}
+            </p>
           </div>
-          <p class="mt-2 text-xs font-medium text-ink-muted">
-            MAX JEUNE permet de garder {{ MAX_ACTIVE_BOOKINGS }} trajets réservés à la fois.
-          </p>
         </div>
+        <template v-if="dashboard && dashboard.bookings.past.length > 0">
+          <p class="eyebrow mt-5">
+            Réservations passées
+          </p>
+          <ul class="mt-2 divide-y divide-line">
+            <li
+              v-for="booking in dashboard.bookings.past"
+              :key="`${booking.tripKey}/${booking.legKind}`"
+              class="flex items-center justify-between gap-3 py-2"
+            >
+              <span class="tnum min-w-0 text-xs font-bold">
+                {{ historyLegLabel({ kind: booking.legKind, date: booking.train.date }) }} · {{ booking.train.departureTime }}
+              </span>
+              <AppChip tone="booked">
+                Réservé à J-{{ booking.daysBefore }}
+              </AppChip>
+            </li>
+          </ul>
+        </template>
       </SurfaceCard>
 
       <SurfaceCard
@@ -168,6 +194,11 @@ const ghostBarHeights = [36, 52, 68, 44, 28, 24, 20, 24, 18, 16, 20, 28, 48, 60,
           {{ emptyText }}
         </p>
       </SurfaceCard>
+
+      <LegHistoryCard
+        :legs="dashboard?.legs ?? []"
+        :empty-text="emptyText"
+      />
     </div>
   </div>
 </template>

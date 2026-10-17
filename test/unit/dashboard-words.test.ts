@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { HOUR_BANDS, type SlotGrid } from '#shared/domain/opening-history'
-import { bandLabel, lifetimeHeadline, lifetimeLabel, curveHeadline, slotHeadline, weekdaysLabel } from '../../app/utils/dashboard-words'
+import type { LegHistoryColumn } from '#shared/domain/leg-history'
+import { bandLabel, bookedTripsText, bookingPaceText, daysBeforeLabel, historyLegLabel, legHistoryHeadline, lifetimeHeadline, lifetimeLabel, curveHeadline, slotHeadline, trainsText, weekdaysLabel } from '../../app/utils/dashboard-words'
+
+/** A leg history column with `candidates` candidates, `daysBefore` days before departure; its best one does not matter to the words. */
+function column(daysBefore: number, candidates: number): LegHistoryColumn {
+  return { snapshotId: daysBefore, day: '2026-10-01', daysBefore, candidates, best: null }
+}
 
 /** A slot grid whose best slot is `best`; its rows do not matter to the words. */
 function grid(best: SlotGrid['best']): SlotGrid {
@@ -47,5 +53,43 @@ describe('dashboard words', () => {
     expect(weekdaysLabel([5, 7])).toBe('Vendredi & dimanche')
     expect(weekdaysLabel([4, 5, 7])).toBe('Jeudi, vendredi & dimanche')
     expect(weekdaysLabel([6])).toBe('Samedi')
+  })
+
+  it('tells the average booking day', () => {
+    expect(bookingPaceText(9)).toBe('Vous réservez en moyenne à J-9.')
+    expect(bookingPaceText(0)).toBe('Vous réservez en moyenne le jour du départ.')
+    expect(bookingPaceText(null)).toBe('Votre rythme de réservation apparaîtra après votre première réservation.')
+  })
+
+  it('names a leg on its history chip', () => {
+    expect(historyLegLabel({ kind: 'outbound', date: '2026-10-23' })).toBe('Aller · Ven 23 oct.')
+    expect(historyLegLabel({ kind: 'return', date: '2026-11-01' })).toBe('Retour · Dim 1 nov.')
+  })
+
+  it('names the day a snapshot was taken, before departure', () => {
+    expect(daysBeforeLabel(6)).toBe('J-6')
+    expect(daysBeforeLabel(0)).toBe('Départ')
+  })
+
+  it('captions the bookings count', () => {
+    expect(bookedTripsText(0)).toBe('trajet réservé en ce moment')
+    expect(bookedTripsText(2)).toBe('trajets réservés en ce moment')
+  })
+
+  it('counts trains', () => {
+    expect(trainsText(0)).toBe('aucun train')
+    expect(trainsText(1)).toBe('1 train')
+    expect(trainsText(3)).toBe('3 trains')
+  })
+
+  it('concludes a leg’s history with its latest snapshot until it leaves, then with its peak', () => {
+    const upcoming = { kind: 'outbound', date: '2026-10-23', past: false } as const
+    const past = { kind: 'return', date: '2026-10-11', past: true } as const
+
+    expect(legHistoryHeadline({ ...upcoming, columns: [column(7, 4), column(6, 3)] })).toBe('Aller du vendredi 23 octobre : 3 trains au dernier instantané.')
+    expect(legHistoryHeadline({ ...upcoming, columns: [column(7, 0)] })).toBe('Aller du vendredi 23 octobre : aucun train au dernier instantané.')
+    expect(legHistoryHeadline({ ...past, columns: [column(9, 1), column(8, 5), column(3, 5), column(2, 0)] })).toBe('Retour du dimanche 11 octobre : jusqu’à 5 trains, à J-8.')
+    expect(legHistoryHeadline({ ...past, columns: [column(9, 0)] })).toBe('Retour du dimanche 11 octobre : aucun train n’a eu de place.')
+    expect(legHistoryHeadline({ ...past, columns: [] })).toBeNull()
   })
 })
