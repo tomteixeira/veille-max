@@ -1,16 +1,7 @@
 <script setup lang="ts">
-import type { LegKind } from '#shared/domain/trip-template'
-
 useHead({ title: 'Réglages' })
 
-const [{ template, stations, status, refresh, stationName, saveLeg }, { routeWeight, save: saveRouteWeight }] = await Promise.all([
-  useTripTemplate(),
-  useRouteWeight(),
-])
-
-/** The leg whose editor is open in the bottom sheet. */
-const editing = ref<LegKind | null>(null)
-const editorTitleId = useId()
+const [{ routeWeight, save: saveRouteWeight }, { progress }] = await Promise.all([useRouteWeight(), useOnboarding()])
 
 const supabase = useSupabaseClient()
 const traveller = useSupabaseUser()
@@ -43,65 +34,7 @@ async function signOut() {
       </p>
     </PageHeader>
 
-    <TicketCard
-      v-if="template"
-      class="mx-6 mt-5"
-    >
-      <template
-        v-for="(kind, index) in LEG_KINDS"
-        :key="kind"
-      >
-        <TicketPerforation v-if="index > 0" />
-        <LegHalf
-          :kind="kind"
-          :day="WEEKDAY_NAMES[template[kind].weekday]"
-          :leg="template[kind]"
-          :station-name="stationName"
-          :disabled="!interactive"
-          @edit="editing = kind"
-        />
-      </template>
-    </TicketCard>
-    <SurfaceCard
-      v-else-if="status === 'error'"
-      class="mx-6 mt-5"
-    >
-      <p
-        role="alert"
-        class="text-[13px] leading-snug font-semibold text-accent-ink"
-      >
-        Impossible de charger votre week-end type pour l’instant.
-      </p>
-      <button
-        type="button"
-        :disabled="!interactive"
-        class="mt-3 h-11 w-full rounded-control bg-surface-muted text-[13px] font-bold transition-opacity hover:opacity-80 disabled:opacity-60"
-        @click="refresh()"
-      >
-        Réessayer
-      </button>
-    </SurfaceCard>
-
-    <BottomSheet
-      :open="editing !== null"
-      :labelledby="editorTitleId"
-      @close="editing = null"
-    >
-      <LegEditor
-        v-if="editing && template"
-        :key="editing"
-        :kind="editing"
-        :title="`${LEG_NAMES[editing]} par défaut`"
-        :day="template[editing].weekday"
-        :days="WEEKDAY_CHOICES"
-        :leg="template[editing]"
-        :stations="stations"
-        :station-name="stationName"
-        :title-id="editorTitleId"
-        :save="(weekday, leg) => saveLeg(editing!, { ...leg, weekday })"
-        @close="editing = null"
-      />
-    </BottomSheet>
+    <TripTemplateEditor class="mx-6 mt-5" />
 
     <section
       class="mt-7 space-y-4 px-6"
@@ -138,8 +71,19 @@ async function signOut() {
             <dt class="text-[13px] font-bold">
               Application
             </dt>
-            <dd>
-              <AppChip>Bientôt</AppChip>
+            <dd
+              v-if="progress?.installed"
+              class="text-[13px] font-semibold text-booked-ink"
+            >
+              Installée sur l’écran d’accueil
+            </dd>
+            <dd v-else>
+              <NuxtLink
+                to="/onboarding?step=installation"
+                class="text-[13px] font-bold text-accent-ink hover:underline"
+              >
+                Installer sur l’écran d’accueil
+              </NuxtLink>
             </dd>
           </div>
         </dl>

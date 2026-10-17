@@ -6,7 +6,14 @@ useHead({ title: 'Accueil' })
 
 // Computed once on the server so the hydrated page shows the same day.
 const today = useState('home-today', () => formatParisLongDay(new Date()))
-const [lastSnapshot, { data: home }] = await Promise.all([useLastSnapshotTime(), useFetch('/api/home')])
+const [lastSnapshot, { data: home }, { progress, missing }] = await Promise.all([
+  useLastSnapshotTime(),
+  useFetch('/api/home'),
+  useOnboarding(),
+])
+
+// After their first sign-in, a traveller goes through onboarding before anything else.
+if (progress.value && progress.value.current !== 'done') await navigateTo('/onboarding', { replace: true })
 
 const trips = computed(() => home.value?.trips ?? [])
 const upcoming = computed(() => home.value?.upcoming ?? [])
@@ -76,6 +83,12 @@ const steps = [
         </AppChip>
       </div>
     </PageHeader>
+
+    <OnboardingBanner
+      v-if="missing[0]"
+      :step="missing[0]"
+      class="mx-6 mt-6"
+    />
 
     <section
       v-if="home?.hasRoutes"

@@ -303,14 +303,14 @@ isOneToOne: false
                   ]
                 },"traveller_settings": {
                   Row: {
-                    "confirmation_reminders": boolean,"route_weight": number | null,"user_id": string
+                    "confirmation_reminders": boolean,"installed_at": string | null,"onboarding_step": string,"route_weight": number | null,"user_id": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "confirmation_reminders"?: boolean,"route_weight"?: number | null,"user_id"?: string
+                    "confirmation_reminders"?: boolean,"installed_at"?: string | null,"onboarding_step"?: string,"route_weight"?: number | null,"user_id"?: string
                   }
                   Update: {
-                    "confirmation_reminders"?: boolean,"route_weight"?: number | null,"user_id"?: string
+                    "confirmation_reminders"?: boolean,"installed_at"?: string | null,"onboarding_step"?: string,"route_weight"?: number | null,"user_id"?: string
                   }
                   Relationships: [
                     

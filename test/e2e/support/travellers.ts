@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext, type Page } from '@playwright/test'
 import { createClient } from '@supabase/supabase-js'
+import type { Database } from '../../../shared/types/database.types'
 import { clearMailbox, readLatestEmail, type ReceivedEmail } from './mailbox'
 
 /** The email of the invited traveller of `supabase/seed.sql`. */
@@ -15,19 +16,26 @@ export function signInCodeFrom(email: ReceivedEmail): string {
   return code!
 }
 
-/** Signs `address` in through the sign-in screen, with the code read from the mail catcher. */
-export async function signInThroughTheApp(page: Page, request: APIRequestContext, address: string): Promise<void> {
+/** Signs `address` in through the sign-in screen, with the code read from the mail catcher, and expects them on `landing`. */
+export async function signInThroughTheApp(page: Page, request: APIRequestContext, address: string, landing = '/'): Promise<void> {
   await clearMailbox(request, address)
   await page.goto('/login')
   await page.getByLabel('Adresse e-mail').fill(address)
   await page.getByRole('button', { name: 'Recevoir un code' }).click()
   await page.getByLabel('Code à 6 chiffres').fill(signInCodeFrom(await readLatestEmail(request, address)))
-  await expect(page).toHaveURL('/')
+  await expect(page).toHaveURL(landing)
+}
+
+/** The server role of the local stack, which bypasses RLS: for arranging and cleaning up. */
+function admin() {
+  return createClient<Database>(process.env.NUXT_PUBLIC_SUPABASE_URL!, process.env.NUXT_SUPABASE_SECRET_KEY!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
 }
 
 /** Supabase Auth's admin API, with the local stack's secret key. */
 function authAdmin() {
-  return createClient(process.env.NUXT_PUBLIC_SUPABASE_URL!, process.env.NUXT_SUPABASE_SECRET_KEY!).auth.admin
+  return admin().auth.admin
 }
 
 async function findAccount(address: string) {
@@ -45,11 +53,19 @@ export async function hasAccount(address: string): Promise<boolean> {
  * Invites a new traveller, as the README says to: an account with a confirmed
  * email, so they can ask for a sign-in code. For tests that need a traveller of
  * their own; remove them with `removeTraveller`. Returns their id.
+ *
+ * The traveller has been through onboarding, and lands on the home screen once
+ * signed in, unless `onboarded` is `false`.
  */
-export async function inviteTraveller(address: string): Promise<string> {
+export async function inviteTraveller(address: string, { onboarded = true } = {}): Promise<string> {
   const { data, error } = await authAdmin().createUser({ email: address, email_confirm: true })
   expect(error).toBeNull()
-  return data.user!.id
+  const travellerId = data.user!.id
+  if (onboarded) {
+    const settings = await admin().from('traveller_settings').insert({ user_id: travellerId, onboarding_step: 'done' })
+    expect(settings.error).toBeNull()
+  }
+  return travellerId
 }
 
 /** Deletes the traveller's account, and with it every row they own. */
