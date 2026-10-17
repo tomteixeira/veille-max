@@ -26,6 +26,7 @@ export async function useTripTemplate() {
 
   async function saveLeg(kind: LegKind, leg: TemplateLeg): Promise<void> {
     await saveTemplateLeg(supabase, kind, leg)
+    await resetLegReferences()
     // The data is a shallow ref: replace it for the page to see the change.
     if (data.value) data.value = { ...data.value, template: { ...data.value.template, [kind]: leg } }
   }

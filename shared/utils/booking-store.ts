@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Booking } from '../domain/evaluation'
 import type { LegKind } from '../domain/trip-template'
 import type { Database } from '../types/database.types'
+import { bookedTrainFromRow } from './observation-store'
 
 // Reads and writes a traveller's bookings (table `bookings`). With a
 // traveller's client, RLS limits every read and write to their own rows.
@@ -19,15 +20,8 @@ export async function loadBookings(client: Client, travellerId: string): Promise
   return data.map(row => ({
     tripKey: row.trip_key,
     legKind: row.leg_kind,
-    train: {
-      date: row.travel_date,
-      trainNumber: row.train_number,
-      originCode: row.origin_code,
-      destinationCode: row.destination_code,
-      // Postgres `time` reads « HH:MM:SS »; the domain uses « HH:MM ».
-      departureTime: row.train_observations.departure_time.slice(0, 5),
-      arrivalTime: row.train_observations.arrival_time.slice(0, 5),
-    },
+    // The booked train's latest times are its observation's.
+    train: bookedTrainFromRow({ ...row, ...row.train_observations }),
   }))
 }
 
