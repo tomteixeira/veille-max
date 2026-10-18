@@ -120,6 +120,9 @@ async function checkCode() {
     errorMessage.value = codeCheckFailure(error)
     return
   }
+  // On iPhone, removing the field while the keyboard is still open seems to leave the viewport
+  // offset, so the fixed tab bar scrolls with every page until the app is relaunched (#5).
+  codeInput.value?.blur()
   await navigateTo(redirectPath.pluck() || '/', { replace: true })
 }
 
